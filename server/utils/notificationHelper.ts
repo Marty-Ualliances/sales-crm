@@ -1,0 +1,73 @@
+import Notification from '../models/Notification';
+
+export async function createNotification(data: {
+  type: 'follow-up' | 'overdue' | 'assignment' | 'system';
+  title: string;
+  message: string;
+  leadId?: string;
+  userId?: string;
+}) {
+  try {
+    const notification = new Notification({
+      type: data.type,
+      title: data.title,
+      message: data.message,
+      timestamp: new Date(),
+      read: false,
+      leadId: data.leadId,
+      userId: data.userId,
+    });
+    await notification.save();
+    return notification;
+  } catch (error) {
+    console.error('Failed to create notification:', error);
+    return null;
+  }
+}
+
+export async function notifyLeadStatusChange(leadId: string, leadName: string, oldStatus: string, newStatus: string, userId?: string) {
+  return createNotification({
+    type: 'system',
+    title: 'Lead Status Changed',
+    message: `${leadName} status changed from ${oldStatus} to ${newStatus}`,
+    leadId,
+    userId,
+  });
+}
+
+export async function notifyNewLead(leadId: string, leadName: string, assignedAgent: string) {
+  return createNotification({
+    type: 'assignment',
+    title: 'New Lead Assigned',
+    message: `New lead ${leadName} assigned to ${assignedAgent}`,
+    leadId,
+  });
+}
+
+export async function notifyFollowUpDue(leadId: string, leadName: string, dueDate: Date, userId?: string) {
+  return createNotification({
+    type: 'follow-up',
+    title: 'Follow-up Due',
+    message: `Follow-up for ${leadName} is due on ${dueDate.toISOString().split('T')[0]}`,
+    leadId,
+    userId,
+  });
+}
+
+export async function notifyFollowUpOverdue(leadId: string, leadName: string, userId?: string) {
+  return createNotification({
+    type: 'overdue',
+    title: 'Follow-up Overdue',
+    message: `Follow-up for ${leadName} is overdue`,
+    leadId,
+    userId,
+  });
+}
+
+export async function notifyLeadImported(count: number) {
+  return createNotification({
+    type: 'system',
+    title: 'CSV Import Complete',
+    message: `Successfully imported ${count} leads`,
+  });
+}

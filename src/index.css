@@ -1,0 +1,192 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* Light Cream Background: #FFF6EE */
+    --background: 30 100% 97%;
+    /* Dark Blue Text: #0F2A44 */
+    --foreground: 210 62% 16%;
+
+    --card: 30 100% 97%;
+    --card-foreground: 210 62% 16%;
+
+    --popover: 30 100% 97%;
+    --popover-foreground: 210 62% 16%;
+
+    /* Accent Orange: #F5A623 */
+    --primary: 38 92% 55%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 30 40% 92%;
+    --secondary-foreground: 210 62% 16%;
+
+    --muted: 30 30% 90%;
+    --muted-foreground: 210 30% 40%;
+
+    --accent: 38 92% 55%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    --success: 152 60% 42%;
+    --success-foreground: 0 0% 100%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+
+    /* Dark Blue Border: #0F2A44 */
+    --border: 210 50% 30%;
+    --input: 210 50% 30%;
+    --ring: 38 92% 55%;
+
+    --radius: 0.625rem;
+
+    /* Dark Blue Sidebar */
+    --sidebar-background: 210 62% 16%;
+    --sidebar-foreground: 30 100% 97%;
+    --sidebar-primary: 38 92% 55%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 210 50% 25%;
+    --sidebar-accent-foreground: 30 100% 97%;
+    --sidebar-border: 210 40% 20%;
+    --sidebar-ring: 38 92% 55%;
+
+    --chart-1: 38 92% 55%;
+    --chart-2: 152 60% 42%;
+    --chart-3: 210 62% 40%;
+    --chart-4: 262 52% 55%;
+    --chart-5: 0 72% 51%;
+
+    --gradient-primary: linear-gradient(135deg, hsl(38 92% 55%), hsl(35 95% 60%));
+    --gradient-hero: linear-gradient(135deg, hsl(210 62% 16%), hsl(210 50% 25%));
+    --shadow-card: 0 1px 3px 0 hsl(210 62% 16% / 0.06), 0 1px 2px -1px hsl(210 62% 16% / 0.06);
+    --shadow-card-hover: 0 10px 25px -5px hsl(210 62% 16% / 0.08), 0 8px 10px -6px hsl(210 62% 16% / 0.04);
+    --shadow-elevated: 0 20px 40px -12px hsl(210 62% 16% / 0.12);
+  }
+
+  .dark {
+    --background: 215 25% 8%;
+    --foreground: 210 15% 93%;
+
+    --card: 215 25% 12%;
+    --card-foreground: 210 15% 93%;
+
+    --popover: 215 25% 12%;
+    --popover-foreground: 210 15% 93%;
+
+    --primary: 187 65% 50%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 215 20% 18%;
+    --secondary-foreground: 210 15% 90%;
+
+    --muted: 215 20% 16%;
+    --muted-foreground: 215 12% 55%;
+
+    --accent: 215 20% 18%;
+    --accent-foreground: 187 65% 60%;
+
+    --destructive: 0 62% 30%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 215 20% 18%;
+    --input: 215 20% 18%;
+    --ring: 187 65% 50%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+}
+
+@layer utilities {
+  .gradient-primary {
+    background: var(--gradient-primary);
+  }
+  .gradient-hero {
+    background: var(--gradient-hero);
+  }
+  .shadow-card {
+    box-shadow: var(--shadow-card);
+  }
+  .shadow-card-hover {
+    box-shadow: var(--shadow-card-hover);
+  }
+  .shadow-elevated {
+    box-shadow: var(--shadow-elevated);
+  }
+
+  /* Stagger animation delays */
+  .stagger-1 { animation-delay: 0.05s; }
+  .stagger-2 { animation-delay: 0.10s; }
+  .stagger-3 { animation-delay: 0.15s; }
+  .stagger-4 { animation-delay: 0.20s; }
+  .stagger-5 { animation-delay: 0.25s; }
+  .stagger-6 { animation-delay: 0.30s; }
+  .stagger-7 { animation-delay: 0.35s; }
+  .stagger-8 { animation-delay: 0.40s; }
+
+  /* Shimmer text / skeleton */
+  .shimmer-text {
+    background: linear-gradient(
+      90deg,
+      hsl(var(--foreground)) 0%,
+      hsl(var(--foreground) / 0.55) 40%,
+      hsl(var(--foreground)) 80%
+    );
+    background-size: 200% auto;
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+    animation: shimmer 3s linear infinite;
+  }
+
+  /* Glow card on hover */
+  .glow-card {
+    transition: box-shadow 0.3s ease, transform 0.3s ease;
+  }
+  .glow-card:hover {
+    box-shadow: 0 0 0 2px hsl(var(--primary) / 0.3), var(--shadow-elevated);
+    transform: translateY(-3px);
+  }
+
+  /* Animated gradient border */
+  .gradient-border {
+    position: relative;
+  }
+  .gradient-border::before {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--success)), hsl(var(--primary)));
+    background-size: 300% 300%;
+    animation: shimmer 4s linear infinite;
+    z-index: -1;
+    opacity: 0;
+    transition: opacity 0.3s;
+  }
+  .gradient-border:hover::before {
+    opacity: 1;
+  }
+
+  /* Initial hidden state for animated elements */
+  .animate-fade-in,
+  .animate-slide-up,
+  .animate-scale-in,
+  .animate-slide-in-right,
+  .animate-slide-in-left,
+  .animate-bounce-in {
+    animation-fill-mode: both;
+  }
+}
