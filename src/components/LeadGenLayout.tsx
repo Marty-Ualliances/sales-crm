@@ -1,35 +1,24 @@
 import { ReactNode, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import {
-  Calendar, Home,
-  Layers, LogOut, Settings, StickyNote, Users, Zap, Menu, X, Clock, Phone, Shield, UserCog, Eye, Mail, Linkedin, CalendarCheck, Mic
+  Home, Users, FileSpreadsheet, LogOut, StickyNote, Zap, Menu, X, Mail, Linkedin, Target, Calendar
 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { useNotifications } from '@/hooks/useApi';
 import NotificationDropdown from './NotificationDropdown';
 import { useAuth } from '@/contexts/AuthContext';
 import { useSocket } from '@/hooks/useSocket';
 
-const adminNavItems = [
-  { icon: Home, label: 'Dashboard', path: '/admin' },
-  { icon: Users, label: 'All Leads', path: '/admin/leads' },
-  { icon: Phone, label: 'All Calls', path: '/admin/calls' },
-  { icon: Mic, label: 'Call Recordings', path: '/admin/recordings' },
-  { icon: Clock, label: 'Follow-ups', path: '/admin/follow-ups' },
-  // { icon: FileSpreadsheet, label: 'CSV Upload', path: '/admin/upload' },
-  { icon: Layers, label: 'Pipeline', path: '/admin/pipeline' },
-  // { icon: BarChart3, label: 'Agent KPIs', path: '/admin/kpis' },
-  { icon: UserCog, label: 'Team Management', path: '/admin/team' },
-  { icon: Calendar, label: 'Calendar', path: '/admin/calendar' },
-  { icon: CalendarCheck, label: 'Meetings', path: '/admin/meetings' },
-  { icon: StickyNote, label: 'My Notes', path: '/admin/notes' },
-  { icon: Mail, label: 'Email Outreach', path: '/admin/email' },
-  { icon: Linkedin, label: 'LinkedIn Outreach', path: '/admin/linkedin' },
-  { icon: Eye, label: 'Impersonate', path: '/admin/impersonate' },
-  { icon: Settings, label: 'Settings', path: '/admin/settings' },
+const leadGenNavItems = [
+  { icon: Home, label: 'Dashboard', path: '/leadgen' },
+  { icon: Users, label: 'All Leads', path: '/leadgen/leads' },
+  { icon: FileSpreadsheet, label: 'CSV Upload', path: '/leadgen/upload' },
+  { icon: Mail, label: 'Email Outreach', path: '/leadgen/email' },
+  { icon: Linkedin, label: 'LinkedIn Outreach', path: '/leadgen/linkedin' },
+  { icon: Calendar, label: 'Meetings', path: '/leadgen/meetings' },
+  { icon: StickyNote, label: 'My Notes', path: '/leadgen/notes' },
 ];
 
-export default function AdminLayout({ children }: { children: ReactNode }) {
+export default function LeadGenLayout({ children }: { children: ReactNode }) {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -57,37 +46,35 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </button>
         </div>
 
-        {/* Admin badge */}
+        {/* Lead Gen badge */}
         <div className="px-4 py-3 border-b border-sidebar-border">
-          <div className="flex items-center gap-2 rounded-lg bg-primary/10 px-3 py-2">
-            <Shield className="h-4 w-4 text-primary" />
-            <span className="text-sm font-semibold text-primary">Admin Panel</span>
+          <div className="flex items-center gap-2 rounded-lg bg-emerald-500/10 px-3 py-2">
+            <Target className="h-4 w-4 text-emerald-600" />
+            <span className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">Lead Gen Panel</span>
           </div>
         </div>
 
         <nav className="flex-1 px-3 py-4 space-y-1 overflow-y-auto">
-          {adminNavItems.map(item => {
+          {leadGenNavItems.map(item => {
             const active = location.pathname === item.path ||
-              (item.path !== '/admin' && location.pathname.startsWith(item.path));
+              (item.path !== '/leadgen' && location.pathname.startsWith(item.path));
             return (
               <Link
                 key={item.path}
                 to={item.path}
                 onClick={() => setSidebarOpen(false)}
                 className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${active
-                  ? 'bg-sidebar-accent text-sidebar-primary'
-                  : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                    ? 'bg-sidebar-accent text-sidebar-primary'
+                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
                   }`}
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}
-                {item.label === 'Follow-ups' && (
-                  <Badge variant="destructive" className="ml-auto text-xs h-5 px-1.5">4</Badge>
-                )}
               </Link>
             );
           })}
         </nav>
+
         <div className="p-3 border-t border-sidebar-border">
           <button
             onClick={handleLogout}
@@ -112,12 +99,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-3">
             <NotificationDropdown notifications={notifications} unreadCount={unreadCount} />
             <div className="flex items-center gap-2">
-              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
-                {user?.avatar || 'AD'}
+              <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-600 text-white text-sm font-medium">
+                {user?.avatar || 'LG'}
               </div>
               <div className="hidden sm:block">
-                <p className="text-sm font-medium text-foreground">{user?.name || 'Admin'}</p>
-                <p className="text-xs text-muted-foreground">Admin</p>
+                <p className="text-sm font-medium text-foreground">{user?.name || 'Lead Gen'}</p>
+                <p className="text-xs text-muted-foreground">Lead Gen</p>
               </div>
             </div>
           </div>

@@ -23,7 +23,8 @@ export default function LoginPage() {
     setLoading(false);
 
     if (result.success) {
-      navigate(result.role === 'admin' ? '/admin' : '/sdr', { replace: true });
+      const redirectMap: Record<string, string> = { admin: '/admin', sdr: '/sdr', hr: '/hr', leadgen: '/leadgen' };
+      navigate(redirectMap[result.role!] || '/sdr', { replace: true });
     } else {
       setError(result.error || 'Login failed');
     }
@@ -47,7 +48,7 @@ export default function LoginPage() {
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
                 <Zap className="h-5 w-5 text-white" />
               </div>
-              <span className="text-2xl font-bold">InsureLead</span>
+              <span className="text-2xl font-bold">TeamUnited</span>
             </Link>
           </div>
           <div>
@@ -67,7 +68,7 @@ export default function LoginPage() {
             </motion.div>
           </div>
           <div className="text-sm text-white/60">
-            © 2026 InsureLead. All rights reserved.
+            © 2026 TeamUnited. All rights reserved.
           </div>
         </div>
       </div>
@@ -85,7 +86,7 @@ export default function LoginPage() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary">
               <Zap className="h-4 w-4 text-primary-foreground" />
             </div>
-            <span className="text-lg font-bold text-foreground">InsureLead</span>
+            <span className="text-lg font-bold text-foreground">TeamUnited</span>
           </div>
 
           <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-8">
@@ -120,6 +121,22 @@ export default function LoginPage() {
               >
                 <span className="text-foreground font-medium">SDR (Mike)</span>
                 <span className="text-muted-foreground text-xs">mike@insurelead.com</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => fillCredentials('hr@insurelead.com', 'hr123456')}
+                className="w-full flex items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm hover:bg-accent transition-colors"
+              >
+                <span className="text-foreground font-medium">HR</span>
+                <span className="text-muted-foreground text-xs">hr@insurelead.com</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => fillCredentials('leadgen@insurelead.com', 'leadgen123')}
+                className="w-full flex items-center justify-between rounded-md border border-border bg-background px-3 py-2 text-sm hover:bg-accent transition-colors"
+              >
+                <span className="text-foreground font-medium">Lead Gen</span>
+                <span className="text-muted-foreground text-xs">leadgen@insurelead.com</span>
               </button>
             </div>
           </div>

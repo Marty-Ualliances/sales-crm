@@ -1,20 +1,26 @@
 import { ReactNode, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { 
-  Calendar, Home, LogOut, Users, Zap, Menu, X, Clock, Phone, Headphones, Layers
+import {
+  Calendar, Home, LogOut, StickyNote, Users, Zap, Menu, X, Clock, Phone, Headphones, Layers, Mail, Linkedin, CalendarCheck, Mic
 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useNotifications } from '@/hooks/useApi';
 import NotificationDropdown from './NotificationDropdown';
 import { useAuth } from '@/contexts/AuthContext';
+import { useSocket } from '@/hooks/useSocket';
 
 const sdrNavItems = [
   { icon: Home, label: 'Dashboard', path: '/sdr' },
   { icon: Users, label: 'My Leads', path: '/sdr/leads' },
   { icon: Phone, label: 'My Calls', path: '/sdr/calls' },
+  { icon: Mic, label: 'Call Recordings', path: '/sdr/recordings' },
   { icon: Clock, label: 'My Follow-ups', path: '/sdr/follow-ups' },
   { icon: Layers, label: 'Pipeline', path: '/sdr/pipeline' },
   { icon: Calendar, label: 'Calendar', path: '/sdr/calendar' },
+  { icon: CalendarCheck, label: 'Meetings', path: '/sdr/meetings' },
+  { icon: Mail, label: 'Email Outreach', path: '/sdr/email' },
+  { icon: Linkedin, label: 'LinkedIn Outreach', path: '/sdr/linkedin' },
+  { icon: StickyNote, label: 'My Notes', path: '/sdr/notes' },
 ];
 
 export default function SDRLayout({ children }: { children: ReactNode }) {
@@ -24,6 +30,7 @@ export default function SDRLayout({ children }: { children: ReactNode }) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { data: notifications = [] } = useNotifications();
   const unreadCount = notifications.filter((n: any) => !n.read).length;
+  useSocket();
 
   const handleLogout = () => {
     logout();
@@ -38,7 +45,7 @@ export default function SDRLayout({ children }: { children: ReactNode }) {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary animate-glow-pulse">
             <Zap className="h-4 w-4 text-primary-foreground animate-float" />
           </div>
-          <span className="text-lg font-bold text-sidebar-foreground">InsureLead</span>
+          <span className="text-lg font-bold text-sidebar-foreground">TeamUnited</span>
           <button className="ml-auto lg:hidden text-sidebar-foreground" onClick={() => setSidebarOpen(false)}>
             <X className="h-5 w-5" />
           </button>
@@ -61,11 +68,10 @@ export default function SDRLayout({ children }: { children: ReactNode }) {
                 key={item.path}
                 to={item.path}
                 onClick={() => setSidebarOpen(false)}
-                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${
-                  active 
-                    ? 'bg-sidebar-accent text-sidebar-primary' 
-                    : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
-                }`}
+                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors ${active
+                  ? 'bg-sidebar-accent text-sidebar-primary'
+                  : 'text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground'
+                  }`}
               >
                 <item.icon className="h-4 w-4" />
                 {item.label}

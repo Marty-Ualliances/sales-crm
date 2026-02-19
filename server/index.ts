@@ -1,3 +1,4 @@
+import http from 'http';
 import express, { Request, Response, NextFunction } from 'express';
 import mongoose from 'mongoose';
 import cors from 'cors';
@@ -11,6 +12,10 @@ import callRoutes from './routes/calls';
 import agentRoutes from './routes/agents';
 import notificationRoutes from './routes/notifications';
 import taskRoutes from './routes/tasks';
+import hrRoutes from './routes/hr';
+import noteRoutes from './routes/notes';
+import meetingRoutes from './routes/meetings';
+import { initIO } from './socket';
 
 dotenv.config();
 
@@ -24,11 +29,15 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 }
 
 const app = express();
+const httpServer = http.createServer(app);
 const PORT = process.env.PORT || 3001;
 const isProduction = process.env.NODE_ENV === 'production';
 
+// ── Attach Socket.IO ──
+initIO(httpServer);
+
 // ── Security middleware ──
-app.use(helmet()); // Secure HTTP headers (X-Content-Type-Options, X-Frame-Options, etc.)
+app.use(helmet());
 app.use(cors({
   origin: isProduction ? process.env.ALLOWED_ORIGINS?.split(',') : true,
   credentials: true,
@@ -40,9 +49,7 @@ app.use(cors({
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
-// Prevent NoSQL injection — strip keys starting with $ or containing .
-// Custom middleware because express-mongo-sanitize is incompatible with Express 5
-// (req.query is read-only in Express 5)
+// Prevent NoSQL injection
 function sanitize(obj: any): any {
   if (obj === null || typeof obj !== 'object') return obj;
   if (Array.isArray(obj)) return obj.map(sanitize);
@@ -67,7 +74,7 @@ app.use((req: Request, _res: Response, next: NextFunction) => {
 
 // Rate limiting
 const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
+  windowMs: 15 * 60 * 1000,
   max: 200,
   standardHeaders: true,
   legacyHeaders: false,
@@ -75,7 +82,6 @@ const apiLimiter = rateLimit({
 });
 app.use('/api', apiLimiter);
 
-// Stricter rate limit for auth endpoints
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 20,
@@ -85,7 +91,6 @@ const authLimiter = rateLimit({
 });
 app.use('/api/auth', authLimiter);
 
-// Disable X-Powered-By
 app.disable('x-powered-by');
 
 // ── Routes ──
@@ -95,6 +100,9 @@ app.use('/api/calls', callRoutes);
 app.use('/api/agents', agentRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/tasks', taskRoutes);
+app.use('/api/hr', hrRoutes);
+app.use('/api/notes', noteRoutes);
+app.use('/api/meetings', meetingRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {
@@ -106,7 +114,7 @@ app.use((_req: Request, res: Response) => {
   res.status(404).json({ error: 'Not found' });
 });
 
-// Global error handler — never leak stack traces
+// Global error handler
 app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   console.error('Unhandled error:', err.message);
   res.status(500).json({ error: isProduction ? 'Internal server error' : err.message });
@@ -117,7 +125,7 @@ mongoose
   .connect(MONGODB_URI)
   .then(() => {
     console.log('Connected to MongoDB');
-    app.listen(PORT, () => {
+    httpServer.listen(PORT, () => {
       console.log(`Server running on port ${PORT}`);
     });
   })

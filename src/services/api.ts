@@ -61,7 +61,7 @@ export interface LoginResponse {
     name: string;
     email: string;
     avatar: string;
-    role: 'admin' | 'sdr';
+    role: 'admin' | 'sdr' | 'hr' | 'leadgen';
   };
 }
 
@@ -78,6 +78,11 @@ export const api = {
         body: JSON.stringify({ email, password }),
       }),
     me: () => request<LoginResponse['user']>('/auth/me'),
+    impersonate: (userId: string) =>
+      request<LoginResponse>('/auth/impersonate', {
+        method: 'POST',
+        body: JSON.stringify({ userId }),
+      }),
   },
 
   leads: {
@@ -116,6 +121,8 @@ export const api = {
       request<any>(`/leads/${id}/complete-followup`, { method: 'POST' }),
     scheduleFollowUp: (id: string, date: string) =>
       request<any>(`/leads/${id}/schedule-followup`, { method: 'POST', body: JSON.stringify({ date }) }),
+    bulkAssign: (leadIds: string[], agentName: string) =>
+      request<{ updated: number }>('/leads/bulk-assign', { method: 'POST', body: JSON.stringify({ leadIds, agentName }) }),
   },
 
   calls: {
@@ -134,7 +141,7 @@ export const api = {
   agents: {
     list: () => request<any[]>('/agents'),
     get: (id: string) => request<any>(`/agents/${id}`),
-    create: (data: { name: string; email: string; password: string; role: 'admin' | 'sdr' }) =>
+    create: (data: { name: string; email: string; password: string; role: 'admin' | 'sdr' | 'hr' | 'leadgen' }) =>
       request<any>('/agents', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) =>
       request<any>(`/agents/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
@@ -150,7 +157,36 @@ export const api = {
       request<any>('/notifications/read-all', { method: 'PUT' }),
   },
 
+  notes: {
+    list: () => request<any[]>('/notes'),
+    create: (content: string) =>
+      request<any>('/notes', { method: 'POST', body: JSON.stringify({ content }) }),
+    update: (id: string, content: string) =>
+      request<any>(`/notes/${id}`, { method: 'PUT', body: JSON.stringify({ content }) }),
+    delete: (id: string) =>
+      request<any>(`/notes/${id}`, { method: 'DELETE' }),
+  },
+
   health: () => request<{ status: string; db: string }>('/health'),
+
+  hr: {
+    dashboard: () => request<any>('/hr/dashboard'),
+    leads: (params?: { status?: string; search?: string; agent?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.status) q.set('status', params.status);
+      if (params?.search) q.set('search', params.search);
+      if (params?.agent) q.set('agent', params.agent);
+      const qs = q.toString();
+      return request<any[]>(`/hr/leads${qs ? `?${qs}` : ''}`);
+    },
+    closedLeads: (params?: { search?: string; agent?: string }) => {
+      const q = new URLSearchParams();
+      if (params?.search) q.set('search', params.search);
+      if (params?.agent) q.set('agent', params.agent);
+      const qs = q.toString();
+      return request<any[]>(`/hr/closed-leads${qs ? `?${qs}` : ''}`);
+    },
+  },
 
   tasks: {
     list: (params?: { assignedTo?: string; status?: string; from?: string; to?: string; priority?: string }) => {
@@ -170,6 +206,16 @@ export const api = {
       request<any>(`/tasks/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) =>
       request<any>(`/tasks/${id}`, { method: 'DELETE' }),
+  },
+
+  meetings: {
+    list: () => request<any[]>('/meetings'),
+    create: (data: any) =>
+      request<any>('/meetings', { method: 'POST', body: JSON.stringify(data) }),
+    update: (id: string, data: any) =>
+      request<any>(`/meetings/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+    delete: (id: string) =>
+      request<any>(`/meetings/${id}`, { method: 'DELETE' }),
   },
 
 };

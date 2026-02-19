@@ -1,4 +1,4 @@
-export type LeadStatus = 'New' | 'Contacted' | 'Follow-up' | 'Closed' | 'Lost' | 'Reshedule' | 'No Show';
+export type LeadStatus = 'New' | 'Contacted' | 'Follow-up' | 'Meeting Done' | 'Positive' | 'Closed' | 'Lost' | 'Reshedule' | 'No Show';
 
 export type LeadSource = 'CSV Import' | 'Manual' | 'Website' | 'Referral' | 'LinkedIn' | 'Other';
 
@@ -28,6 +28,9 @@ export interface Lead {
   // CRM fields
   status: LeadStatus;
   assignedAgent: string;
+  addedBy: string;
+  closedBy: string;
+  closedAt: string | null;
   notes: string;
   nextFollowUp: string | null;
   callCount: number;

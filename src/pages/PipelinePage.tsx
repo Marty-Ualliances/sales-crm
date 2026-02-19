@@ -3,12 +3,16 @@ import { LeadStatus } from '@/types/leads';
 import { Badge } from '@/components/ui/badge';
 import { Loader2 } from 'lucide-react';
 
-const columns: { status: LeadStatus; color: string }[] = [
-  { status: 'New', color: 'bg-primary' },
-  { status: 'Contacted', color: 'bg-warning' },
-  { status: 'Follow-up', color: 'bg-accent-foreground' },
-  { status: 'Closed', color: 'bg-success' },
-  { status: 'Lost', color: 'bg-muted-foreground' },
+const columns: { status: LeadStatus; color: string; label: string }[] = [
+  { status: 'New', color: 'bg-blue-500', label: 'New' },
+  { status: 'Contacted', color: 'bg-yellow-500', label: 'Contacted' },
+  { status: 'Follow-up', color: 'bg-orange-500', label: 'Follow-up' },
+  { status: 'Meeting Done', color: 'bg-indigo-500', label: 'Meeting Done' },
+  { status: 'Positive', color: 'bg-emerald-500', label: 'Positive' },
+  { status: 'Closed', color: 'bg-green-600', label: 'Closed' },
+  { status: 'Lost', color: 'bg-red-500', label: 'Lost' },
+  { status: 'Reshedule', color: 'bg-amber-500', label: 'Reschedule' },
+  { status: 'No Show', color: 'bg-gray-500', label: 'No Show' },
 ];
 
 export default function PipelinePage() {
@@ -21,6 +25,7 @@ export default function PipelinePage() {
       </div>
     );
   }
+
   return (
     <div className="space-y-6">
       <div>
@@ -31,17 +36,17 @@ export default function PipelinePage() {
         {columns.map(col => {
           const colLeads = leads.filter((l: any) => l.status === col.status);
           return (
-            <div key={col.status} className="min-w-[260px] flex-1">
+            <div key={col.status} className="min-w-[220px] flex-1">
               <div className="flex items-center gap-2 mb-3">
                 <div className={`h-2.5 w-2.5 rounded-full ${col.color}`} />
-                <span className="text-sm font-semibold text-foreground">{col.status}</span>
+                <span className="text-sm font-semibold text-foreground">{col.label}</span>
                 <Badge variant="secondary" className="text-xs h-5 px-1.5">{colLeads.length}</Badge>
               </div>
               <div className="space-y-2.5">
                 {colLeads.map((lead: any) => (
                   <div key={lead.id} className="rounded-lg border border-border bg-card p-3.5 shadow-card hover:shadow-card-hover transition-shadow">
                     <p className="font-medium text-foreground text-sm">{lead.name}</p>
-                    <p className="text-xs text-muted-foreground mt-1">{lead.phone}</p>
+                    <p className="text-xs text-muted-foreground mt-1">{lead.companyName || lead.phone}</p>
                     <div className="flex items-center justify-between mt-3">
                       <span className="text-xs text-muted-foreground">{lead.assignedAgent}</span>
                       {lead.callCount > 0 && (

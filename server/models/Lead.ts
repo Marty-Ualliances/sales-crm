@@ -26,8 +26,11 @@ export interface ILead extends Document {
   companyLinkedinUrl: string;
   city: string;
   state: string;
-  status: 'New' | 'Contacted' | 'Follow-up' | 'Closed' | 'Lost' | 'Reshedule' | 'No Show';
+  status: 'New' | 'Contacted' | 'Follow-up' | 'Meeting Done' | 'Positive' | 'Closed' | 'Lost' | 'Reshedule' | 'No Show';
   assignedAgent: string;
+  addedBy: string;
+  closedBy: string;
+  closedAt: Date | null;
   notes: string;
   nextFollowUp: Date | null;
   callCount: number;
@@ -66,8 +69,11 @@ const LeadSchema = new Schema<ILead>(
     companyLinkedinUrl: { type: String, default: '' },
     city: { type: String, default: '' },
     state: { type: String, default: '' },
-    status: { type: String, enum: ['New', 'Contacted', 'Follow-up', 'Closed', 'Lost', 'Reshedule', 'No Show'], default: 'New' },
+    status: { type: String, enum: ['New', 'Contacted', 'Follow-up', 'Meeting Done', 'Positive', 'Closed', 'Lost', 'Reshedule', 'No Show'], default: 'New' },
     assignedAgent: { type: String, required: true },
+    addedBy: { type: String, default: '' },
+    closedBy: { type: String, default: '' },
+    closedAt: { type: Date, default: null },
     notes: { type: String, default: '' },
     nextFollowUp: { type: Date, default: null },
     callCount: { type: Number, default: 0 },
@@ -93,6 +99,7 @@ LeadSchema.set('toJSON', {
     if (ret.date) ret.date = ret.date.toISOString().split('T')[0];
     if (ret.nextFollowUp) ret.nextFollowUp = ret.nextFollowUp.toISOString().split('T')[0];
     if (ret.lastActivity) ret.lastActivity = ret.lastActivity.toISOString().split('T')[0];
+    if (ret.closedAt) ret.closedAt = ret.closedAt.toISOString().split('T')[0];
     delete ret.__v;
     return ret;
   },

@@ -34,7 +34,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
           <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary">
             <Zap className="h-4 w-4 text-primary-foreground" />
           </div>
-          <span className="text-lg font-bold text-sidebar-foreground">InsureLead</span>
+          <span className="text-lg font-bold text-sidebar-foreground">TeamUnited</span>
           <button className="ml-auto lg:hidden text-sidebar-foreground" onClick={() => setSidebarOpen(false)}>
             <X className="h-5 w-5" />
           </button>

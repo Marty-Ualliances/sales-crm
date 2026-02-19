@@ -39,3 +39,10 @@ export function adminOnly(req: AuthRequest, res: Response, next: NextFunction) {
   }
   next();
 }
+
+export function leadgenOrAdmin(req: AuthRequest, res: Response, next: NextFunction) {
+  if (req.user?.role !== 'admin' && req.user?.role !== 'leadgen') {
+    return res.status(403).json({ error: 'Lead Gen or Admin access required' });
+  }
+  next();
+}

@@ -33,7 +33,7 @@ export default function TeamManagement() {
         name: newAgent.name,
         email: newAgent.email,
         password: newAgent.password,
-        role: newAgent.role as 'admin' | 'sdr',
+        role: newAgent.role as 'admin' | 'sdr' | 'hr' | 'leadgen',
       });
       toast.success(`Agent "${newAgent.name}" added successfully`);
       setOpenDialog(false);
@@ -119,7 +119,9 @@ export default function TeamManagement() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="sdr">SDR Agent</SelectItem>
+                    <SelectItem value="leadgen">Lead Gen</SelectItem>
                     <SelectItem value="admin">Admin</SelectItem>
+                    <SelectItem value="hr">HR</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -170,8 +172,11 @@ export default function TeamManagement() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <Badge variant={agent.role === 'admin' ? 'default' : 'secondary'} className="text-xs">
-                    {agent.role}
+                  <Badge
+                    variant={agent.role === 'admin' ? 'default' : 'secondary'}
+                    className={`text-xs ${agent.role === 'leadgen' ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' : ''}`}
+                  >
+                    {agent.role === 'leadgen' ? 'Lead Gen' : agent.role}
                   </Badge>
                   <Button
                     variant="ghost"

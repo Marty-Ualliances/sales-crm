@@ -17,7 +17,8 @@ export default function ProtectedRoute({ children, allowedRoles }: ProtectedRout
 
   if (allowedRoles && !allowedRoles.includes(user.role)) {
     // Redirect to correct panel
-    return <Navigate to={user.role === 'admin' ? '/admin' : '/sdr'} replace />;
+    const redirectMap: Record<string, string> = { admin: '/admin', sdr: '/sdr', hr: '/hr', leadgen: '/leadgen' };
+    return <Navigate to={redirectMap[user.role] || '/login'} replace />;
   }
 
   return <>{children}</>;

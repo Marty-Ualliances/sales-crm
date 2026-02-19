@@ -50,7 +50,7 @@ router.post('/', auth, adminOnly, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
 
-    const validRoles = ['admin', 'sdr'];
+    const validRoles = ['admin', 'sdr', 'hr', 'leadgen'];
     const sanitizedRole = validRoles.includes(role) ? role : 'sdr';
 
     const existingUser = await User.findOne({ email: trimmedEmail });

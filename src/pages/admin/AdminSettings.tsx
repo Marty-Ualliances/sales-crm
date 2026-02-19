@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { useState } from 'react';
 
 export default function AdminSettings() {
-  const [companyName, setCompanyName] = useState('InsureLead Agency');
+  const [companyName, setCompanyName] = useState('TeamUnited');
   const [notifyOverdue, setNotifyOverdue] = useState(true);
   const [notifyNewLead, setNotifyNewLead] = useState(true);
   const [autoAssign, setAutoAssign] = useState(true);

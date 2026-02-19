@@ -1,8 +1,13 @@
 import { Router, Response } from 'express';
 import multer from 'multer';
 import Lead from '../models/Lead';
-import { auth, adminOnly, AuthRequest } from '../middleware/auth';
+import { auth, adminOnly, leadgenOrAdmin, AuthRequest } from '../middleware/auth';
 import { notifyLeadStatusChange, notifyNewLead, notifyFollowUpDue, notifyLeadImported } from '../utils/notificationHelper';
+import { getIO } from '../socket';
+
+function emitLeadChange(action: string, data?: any) {
+  try { getIO().emit('lead:changed', { action, ...(data || {}) }); } catch (_) {}
+}
 
 const router = Router();
 const upload = multer({
@@ -83,6 +88,7 @@ router.get('/', auth, async (req: AuthRequest, res: Response) => {
     } else if (agent) {
       filter.assignedAgent = agent;
     }
+    // admin, leadgen, hr see all leads (no extra filter)
 
     if (status && status !== 'all') filter.status = status;
     if (search) {
@@ -157,12 +163,14 @@ router.get('/:id', auth, async (req: AuthRequest, res: Response) => {
 // POST /api/leads
 router.post('/', auth, async (req: AuthRequest, res: Response) => {
   try {
-    const lead = new Lead(req.body);
+    const User = (await import('../models/User')).default;
+    const currentUser = await User.findById(req.user!.id);
+    const lead = new Lead({ ...req.body, addedBy: currentUser?.name || 'Unknown' });
     await lead.save();
 
     // Create notification for new lead
     await notifyNewLead(lead._id.toString(), lead.name, lead.assignedAgent);
-
+    emitLeadChange('created', { leadId: lead._id });
     res.status(201).json(lead);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -217,6 +225,7 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
 
         if (!doc.name) { errors.push({ row: i + 1, error: 'Missing name' }); continue; }
 
+        doc.addedBy = defaultAgent;
         doc.activities = [{ type: 'note', description: 'Lead imported via CSV', timestamp: new Date(), agent: defaultAgent }];
         const lead = new Lead(doc);
         await lead.save();
@@ -229,6 +238,7 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
     // Create notification for successful import
     if (imported.length > 0) {
       await notifyLeadImported(imported.length);
+      emitLeadChange('imported', { count: imported.length });
     }
 
     res.json({
@@ -247,6 +257,15 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
 router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
   try {
     const oldLead = await Lead.findById(req.params.id);
+
+    // Track who closed the lead
+    if (req.body.status === 'Closed' && oldLead && oldLead.status !== 'Closed') {
+      const User = (await import('../models/User')).default;
+      const currentUser = await User.findById(req.user!.id);
+      req.body.closedBy = currentUser?.name || 'Unknown';
+      req.body.closedAt = new Date();
+    }
+
     const lead = await Lead.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!lead) return res.status(404).json({ error: 'Lead not found' });
 
@@ -254,7 +273,7 @@ router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
     if (oldLead && req.body.status && oldLead.status !== req.body.status) {
       await notifyLeadStatusChange(lead._id.toString(), lead.name, oldLead.status, req.body.status);
     }
-
+    emitLeadChange('updated', { leadId: lead._id });
     res.json(lead);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -328,12 +347,31 @@ router.post('/:id/schedule-followup', auth, async (req: AuthRequest, res: Respon
   }
 });
 
-// DELETE /api/leads/:id
-router.delete('/:id', auth, adminOnly, async (req: AuthRequest, res: Response) => {
+// DELETE /api/leads/:id — admin or leadgen
+router.delete('/:id', auth, leadgenOrAdmin, async (req: AuthRequest, res: Response) => {
   try {
     const lead = await Lead.findByIdAndDelete(req.params.id);
     if (!lead) return res.status(404).json({ error: 'Lead not found' });
+    emitLeadChange('deleted', { leadId: req.params.id });
     res.json({ message: 'Lead deleted' });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/leads/bulk-assign — assign multiple leads to an SDR
+router.post('/bulk-assign', auth, leadgenOrAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const { leadIds, agentName } = req.body;
+    if (!Array.isArray(leadIds) || !leadIds.length || !agentName) {
+      return res.status(400).json({ error: 'leadIds array and agentName are required' });
+    }
+    const result = await Lead.updateMany(
+      { _id: { $in: leadIds } },
+      { $set: { assignedAgent: String(agentName) } }
+    );
+    emitLeadChange('bulk-assigned', { count: result.modifiedCount, agentName });
+    res.json({ updated: result.modifiedCount });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }

@@ -114,4 +114,30 @@ router.get('/me', auth, async (req: AuthRequest, res: Response) => {
   }
 });
 
+// POST /api/auth/impersonate — admin can get a token for any user
+router.post('/impersonate', auth, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+    const { userId } = req.body;
+    if (!userId) {
+      return res.status(400).json({ error: 'userId is required' });
+    }
+    const target = await User.findById(userId);
+    if (!target) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+    const token = jwt.sign(
+      { id: target._id.toString(), role: target.role, email: target.email },
+      getJwtSecret(),
+      { expiresIn: '2h' }
+    );
+    res.json({ token, user: target.toJSON() });
+  } catch (err) {
+    console.error('Impersonate error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 export default router;

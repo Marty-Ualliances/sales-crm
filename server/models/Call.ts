@@ -10,6 +10,8 @@ export interface ICall extends Document {
   status: 'Completed' | 'Missed' | 'Follow-up';
   notes: string;
   hasRecording: boolean;
+  recordingUrl: string;
+  recordingFlagged: boolean;
 }
 
 const CallSchema = new Schema<ICall>(
@@ -23,6 +25,8 @@ const CallSchema = new Schema<ICall>(
     status: { type: String, enum: ['Completed', 'Missed', 'Follow-up'], default: 'Completed' },
     notes: { type: String, default: '' },
     hasRecording: { type: Boolean, default: false },
+    recordingUrl: { type: String, default: '' },
+    recordingFlagged: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

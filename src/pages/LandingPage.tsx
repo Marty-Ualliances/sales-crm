@@ -32,7 +32,7 @@ export default function LandingPage() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary">
               <Zap className="h-4 w-4 text-primary-foreground" />
             </div>
-            <span className="text-lg font-bold text-foreground">InsureLead</span>
+            <span className="text-lg font-bold text-foreground">TeamUnited</span>
           </div>
           <div className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Features</a>
@@ -97,7 +97,7 @@ export default function LandingPage() {
                 <div className="h-3 w-3 rounded-full bg-destructive/60" />
                 <div className="h-3 w-3 rounded-full bg-warning/60" />
                 <div className="h-3 w-3 rounded-full bg-success/60" />
-                <span className="ml-2 text-xs text-muted-foreground">InsureLead Dashboard</span>
+                <span className="ml-2 text-xs text-muted-foreground">TeamUnited Dashboard</span>
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
                 {[
@@ -164,9 +164,9 @@ export default function LandingPage() {
             <div className="flex h-7 w-7 items-center justify-center rounded-lg gradient-primary">
               <Zap className="h-3.5 w-3.5 text-primary-foreground" />
             </div>
-            <span className="font-semibold text-foreground">InsureLead</span>
+            <span className="font-semibold text-foreground">TeamUnited</span>
           </div>
-          <p className="text-sm text-muted-foreground">© 2026 InsureLead. All rights reserved.</p>
+          <p className="text-sm text-muted-foreground">© 2026 TeamUnited. All rights reserved.</p>
         </div>
       </footer>
     </div>

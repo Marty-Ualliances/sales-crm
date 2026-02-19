@@ -42,7 +42,8 @@ export default function SignupPage() {
     setLoading(false);
 
     if (result.success) {
-      navigate(result.role === 'admin' ? '/admin' : '/sdr', { replace: true });
+      const redirectMap: Record<string, string> = { admin: '/admin', sdr: '/sdr', hr: '/hr', leadgen: '/leadgen' };
+      navigate(redirectMap[result.role!] || '/sdr', { replace: true });
     } else {
       setError(result.error || 'Signup failed');
     }
@@ -60,7 +61,7 @@ export default function SignupPage() {
               <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-white/20 backdrop-blur-sm">
                 <Zap className="h-5 w-5 text-white" />
               </div>
-              <span className="text-2xl font-bold">InsureLead</span>
+              <span className="text-2xl font-bold">TeamUnited</span>
             </Link>
           </div>
           <div>
@@ -70,7 +71,7 @@ export default function SignupPage() {
               transition={{ duration: 0.6 }}
             >
               <h2 className="text-4xl font-bold leading-tight mb-4">
-                Join InsureLead.<br />
+                Join TeamUnited.<br />
                 Start closing deals today.
               </h2>
               <p className="text-lg text-white/80 max-w-md">
@@ -80,7 +81,7 @@ export default function SignupPage() {
             </motion.div>
           </div>
           <div className="text-sm text-white/60">
-            © 2026 InsureLead. All rights reserved.
+            © 2026 TeamUnited. All rights reserved.
           </div>
         </div>
       </div>
@@ -98,7 +99,7 @@ export default function SignupPage() {
             <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary">
               <Zap className="h-4 w-4 text-primary-foreground" />
             </div>
-            <span className="text-lg font-bold text-foreground">InsureLead</span>
+            <span className="text-lg font-bold text-foreground">TeamUnited</span>
           </div>
 
           <Link to="/" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-8">

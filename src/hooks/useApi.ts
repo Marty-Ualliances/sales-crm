@@ -139,10 +139,21 @@ export function useCreateCall() {
   });
 }
 
+export function useBulkAssign() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ leadIds, agentName }: { leadIds: string[]; agentName: string }) =>
+      api.leads.bulkAssign(leadIds, agentName),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['leads'] });
+    },
+  });
+}
+
 export function useCreateAgent() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (data: { name: string; email: string; password: string; role: 'admin' | 'sdr' }) =>
+    mutationFn: (data: { name: string; email: string; password: string; role: 'admin' | 'sdr' | 'hr' | 'leadgen' }) =>
       api.agents.create(data),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['agents'] });
@@ -157,6 +168,32 @@ export function useDeleteAgent() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['agents'] });
     },
+  });
+}
+
+// ── HR ──
+
+export function useHRDashboard() {
+  return useQuery({
+    queryKey: ['hr-dashboard'],
+    queryFn: () => api.hr.dashboard(),
+    staleTime: 30_000,
+  });
+}
+
+export function useHRLeads(params?: { status?: string; search?: string; agent?: string }) {
+  return useQuery({
+    queryKey: ['hr-leads', params],
+    queryFn: () => api.hr.leads(params),
+    staleTime: 30_000,
+  });
+}
+
+export function useHRClosedLeads(params?: { search?: string; agent?: string }) {
+  return useQuery({
+    queryKey: ['hr-closed-leads', params],
+    queryFn: () => api.hr.closedLeads(params),
+    staleTime: 30_000,
   });
 }
 
@@ -213,6 +250,74 @@ export function useMarkAllNotificationsRead() {
   return useMutation({
     mutationFn: () => api.notifications.markAllRead(),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+}
+
+// ── Notes (private per-user) ──
+
+export function useNotes() {
+  return useQuery({
+    queryKey: ['notes'],
+    queryFn: () => api.notes.list(),
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (content: string) => api.notes.create(content),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notes'] }),
+  });
+}
+
+export function useUpdateNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, content }: { id: string; content: string }) => api.notes.update(id, content),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notes'] }),
+  });
+}
+
+export function useDeleteNote() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.notes.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['notes'] }),
+  });
+}
+
+// ── Meetings ──
+
+export function useMeetings() {
+  return useQuery({
+    queryKey: ['meetings'],
+    queryFn: () => api.meetings.list(),
+    staleTime: 30_000,
+  });
+}
+
+export function useCreateMeeting() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: any) => api.meetings.create(data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['meetings'] }),
+  });
+}
+
+export function useUpdateMeeting() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, data }: { id: string; data: any }) => api.meetings.update(id, data),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['meetings'] }),
+  });
+}
+
+export function useDeleteMeeting() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.meetings.delete(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['meetings'] }),
   });
 }
 
