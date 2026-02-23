@@ -12,6 +12,10 @@ export interface IMeeting extends Document {
     createdByName: string;
     attendees: string[];
     status: 'scheduled' | 'completed' | 'cancelled';
+    agenda: string;
+    confirmationSent: boolean;
+    nextStep: string;
+    outcome: string;
 }
 
 const MeetingSchema = new Schema<IMeeting>(
@@ -27,6 +31,10 @@ const MeetingSchema = new Schema<IMeeting>(
         createdByName: { type: String, default: '' },
         attendees: [{ type: String }],
         status: { type: String, enum: ['scheduled', 'completed', 'cancelled'], default: 'scheduled' },
+        agenda: { type: String, default: '' },
+        confirmationSent: { type: Boolean, default: false },
+        nextStep: { type: String, default: '' },
+        outcome: { type: String, default: '' },
     },
     { timestamps: true }
 );

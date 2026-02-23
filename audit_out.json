@@ -1,0 +1,10 @@
+{
+  "totalLeads": 10,
+  "totalAppointments": 0,
+  "eventCounts": {
+    "call": 6,
+    "follow-up": 2,
+    "note": 4,
+    "status-change": 2
+  }
+}

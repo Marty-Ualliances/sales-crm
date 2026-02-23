@@ -1,75 +1,17 @@
 import { Router, Request, Response } from 'express';
+import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import User from '../models/User';
 import { auth, AuthRequest } from '../middleware/auth';
+import { sendPasswordResetEmail } from '../services/email';
 
 const router = Router();
-
-const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function getJwtSecret(): string {
   const secret = process.env.JWT_SECRET;
   if (!secret) throw new Error('JWT_SECRET is not configured');
   return secret;
 }
-
-// POST /api/auth/signup
-router.post('/signup', async (req: Request, res: Response) => {
-  try {
-    const { name, email, password } = req.body;
-
-    if (!name || !email || !password) {
-      return res.status(400).json({ error: 'Name, email, and password are required' });
-    }
-
-    const trimmedName = String(name).trim();
-    const trimmedEmail = String(email).trim().toLowerCase();
-
-    if (trimmedName.length < 2 || trimmedName.length > 100) {
-      return res.status(400).json({ error: 'Name must be between 2 and 100 characters' });
-    }
-
-    if (!EMAIL_REGEX.test(trimmedEmail)) {
-      return res.status(400).json({ error: 'Invalid email format' });
-    }
-
-    if (password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
-    }
-
-    const existingUser = await User.findOne({ email: trimmedEmail });
-    if (existingUser) {
-      return res.status(400).json({ error: 'Email already registered' });
-    }
-
-    const initials = trimmedName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
-
-    const user = await User.create({
-      name: trimmedName,
-      email: trimmedEmail,
-      password,
-      avatar: initials,
-      role: 'sdr',
-      leadsAssigned: 0,
-      callsMade: 0,
-      followUpsCompleted: 0,
-      followUpsPending: 0,
-      conversionRate: 0,
-      revenueClosed: 0,
-    });
-
-    const token = jwt.sign(
-      { id: user._id.toString(), role: user.role, email: user.email },
-      getJwtSecret(),
-      { expiresIn: '7d' }
-    );
-
-    res.status(201).json({ token, user: user.toJSON() });
-  } catch (err) {
-    console.error('Signup error:', err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
 
 // POST /api/auth/login
 router.post('/login', async (req: Request, res: Response) => {
@@ -136,6 +78,108 @@ router.post('/impersonate', auth, async (req: AuthRequest, res: Response) => {
     res.json({ token, user: target.toJSON() });
   } catch (err) {
     console.error('Impersonate error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/auth/forgot-password
+router.post('/forgot-password', async (req: Request, res: Response) => {
+  try {
+    const { email } = req.body;
+    if (!email) {
+      return res.status(400).json({ error: 'Email is required' });
+    }
+
+    const trimmedEmail = String(email).trim().toLowerCase();
+    const user = await User.findOne({ email: trimmedEmail });
+
+    // Always return success to prevent email enumeration
+    if (!user) {
+      return res.json({ message: 'If that email exists, a reset link has been sent.' });
+    }
+
+    // Generate token
+    const resetToken = crypto.randomBytes(32).toString('hex');
+    user.resetToken = resetToken;
+    user.resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour
+    await user.save();
+
+    // Send email
+    try {
+      await sendPasswordResetEmail(user.email, user.name, resetToken);
+    } catch (emailErr) {
+      console.error('Email send failed:', emailErr);
+      // Don't expose email errors to client
+    }
+
+    res.json({ message: 'If that email exists, a reset link has been sent.' });
+  } catch (err) {
+    console.error('Forgot password error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/auth/reset-password
+router.post('/reset-password', async (req: Request, res: Response) => {
+  try {
+    const { token, password } = req.body;
+    if (!token || !password) {
+      return res.status(400).json({ error: 'Token and new password are required' });
+    }
+
+    if (String(password).length < 8) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    }
+
+    const user = await User.findOne({
+      resetToken: token,
+      resetTokenExpiry: { $gt: new Date() },
+    });
+
+    if (!user) {
+      return res.status(400).json({ error: 'Invalid or expired reset token' });
+    }
+
+    user.password = password;
+    user.resetToken = undefined;
+    user.resetTokenExpiry = undefined;
+    await user.save(); // pre-save hook hashes password
+
+    res.json({ message: 'Password has been reset. You can now log in.' });
+  } catch (err) {
+    console.error('Reset password error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/auth/change-password (authenticated)
+router.post('/change-password', auth, async (req: AuthRequest, res: Response) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({ error: 'Current password and new password are required' });
+    }
+
+    if (String(newPassword).length < 8) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters' });
+    }
+
+    const user = await User.findById(req.user!.id);
+    if (!user) {
+      return res.status(404).json({ error: 'User not found' });
+    }
+
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({ error: 'Current password is incorrect' });
+    }
+
+    user.password = newPassword;
+    await user.save(); // pre-save hook hashes password
+
+    res.json({ message: 'Password changed successfully' });
+  } catch (err) {
+    console.error('Change password error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

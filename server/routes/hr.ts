@@ -18,8 +18,8 @@ function hrAccess(req: AuthRequest, res: Response, next: any) {
 router.get('/dashboard', auth, hrAccess, async (_req: AuthRequest, res: Response) => {
   try {
     const totalLeads = await Lead.countDocuments();
-    const closedLeads = await Lead.countDocuments({ status: 'Closed' });
-    const lostLeads = await Lead.countDocuments({ status: 'Lost' });
+    const closedLeads = await Lead.countDocuments({ status: 'Closed Won' });
+    const lostLeads = await Lead.countDocuments({ status: 'Closed Lost' });
     const activeLeads = totalLeads - closedLeads - lostLeads;
     const totalCalls = await Call.countDocuments();
     const agents = await User.find({ role: 'sdr' }).select('name callsMade leadsAssigned revenueClosed');
@@ -109,7 +109,7 @@ router.get('/leads', auth, hrAccess, async (req: AuthRequest, res: Response) => 
 router.get('/closed-leads', auth, hrAccess, async (req: AuthRequest, res: Response) => {
   try {
     const { search, agent } = req.query;
-    const filter: any = { status: 'Closed' };
+    const filter: any = { status: { $in: ['Closed Won', 'Closed Lost'] } };
 
     if (agent) {
       filter.$or = [
@@ -120,7 +120,6 @@ router.get('/closed-leads', auth, hrAccess, async (req: AuthRequest, res: Respon
     if (search) {
       const s = String(search);
       filter.$and = [
-        { status: 'Closed' },
         {
           $or: [
             { name: { $regex: s, $options: 'i' } },
@@ -131,7 +130,6 @@ router.get('/closed-leads', auth, hrAccess, async (req: AuthRequest, res: Respon
           ],
         },
       ];
-      delete filter.status;
     }
 
     const leads = await Lead.find(filter).sort({ closedAt: -1, lastActivity: -1 });

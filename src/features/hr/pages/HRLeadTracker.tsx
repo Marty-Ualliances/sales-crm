@@ -1,0 +1,311 @@
+import { useState } from 'react';
+import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { useHRLeads, useAgents } from '@/hooks/useApi';
+import { Search, Users, UserPlus, Phone, CheckCircle2, Loader2, Calendar, Building2 } from 'lucide-react';
+import KPICard from '@/components/common/KPICard';
+import { PIPELINE_STAGES, getStageBadgeClass, TERMINAL_STAGES } from '@/features/leads/constants/pipeline';
+
+export default function HRLeadTracker() {
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('all');
+  const [userFilter, setUserFilter] = useState('all');
+  const [selectedLead, setSelectedLead] = useState<any>(null);
+  const { data: agents = [] } = useAgents();
+  const { data: leads = [], isLoading } = useHRLeads({
+    status: statusFilter,
+    search: search || undefined,
+    agent: userFilter === 'all' ? undefined : userFilter,
+  });
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
+
+  const closedCount = leads.filter((l: any) => l.status === 'Closed Won').length;
+  const activeCount = leads.filter((l: any) => !TERMINAL_STAGES.includes(l.status)).length;
+
+  return (
+    <div className="space-y-6">
+      <div className="animate-slide-up">
+        <h1 className="text-2xl font-bold text-foreground shimmer-text">Lead Tracker</h1>
+        <p className="text-sm text-muted-foreground mt-1">See who added each lead, who called them, and who closed them</p>
+      </div>
+
+      {/* Quick KPIs */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="animate-slide-up stagger-1">
+          <KPICard title="Total Leads" value={leads.length} icon={Users} />
+        </div>
+        <div className="animate-slide-up stagger-2">
+          <KPICard title="Active" value={activeCount} icon={UserPlus} />
+        </div>
+        <div className="animate-slide-up stagger-3">
+          <KPICard title="Closed" value={closedCount} icon={CheckCircle2} variant="success" />
+        </div>
+        <div className="animate-slide-up stagger-4">
+          <KPICard title="Total Calls" value={leads.reduce((s: number, l: any) => s + (l.callCount || 0), 0)} icon={Phone} />
+        </div>
+      </div>
+
+      {/* Filters */}
+      <div className="flex flex-col sm:flex-row gap-3 animate-slide-up stagger-5">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search leads, agents..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-9"
+          />
+        </div>
+        <Select value={userFilter} onValueChange={setUserFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="All Users" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Users</SelectItem>
+            {agents.map((agent: any) => (
+              <SelectItem key={agent.id} value={agent.name}>{agent.name}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-[180px]">
+            <SelectValue placeholder="Filter by status" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All Statuses</SelectItem>
+            {PIPELINE_STAGES.map(s => (
+              <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
+      {/* Leads Table */}
+      <div className="rounded-xl border border-border bg-card shadow-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <Users className="h-5 w-5 text-primary" />
+          <h2 className="text-lg font-semibold text-foreground">All Leads ({leads.length})</h2>
+        </div>
+        {leads.length === 0 ? (
+          <p className="text-sm text-muted-foreground text-center py-12">No leads found</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b text-left">
+                  <th className="pb-3 font-semibold text-muted-foreground">Lead Name</th>
+                  <th className="pb-3 font-semibold text-muted-foreground">Company</th>
+                  <th className="pb-3 font-semibold text-muted-foreground">Status</th>
+                  <th className="pb-3 font-semibold text-muted-foreground">
+                    <div className="flex items-center gap-1"><UserPlus className="h-3.5 w-3.5" />Added By</div>
+                  </th>
+                  <th className="pb-3 font-semibold text-muted-foreground">Assigned To</th>
+                  <th className="pb-3 font-semibold text-muted-foreground">
+                    <div className="flex items-center gap-1"><Phone className="h-3.5 w-3.5" />Called By</div>
+                  </th>
+                  <th className="pb-3 font-semibold text-muted-foreground">
+                    <div className="flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" />Closed By</div>
+                  </th>
+                  <th className="pb-3 font-semibold text-muted-foreground text-center">Calls</th>
+                </tr>
+              </thead>
+              <tbody>
+                {leads.map((lead: any, idx: number) => (
+                  <tr
+                    key={lead.id}
+                    className="border-b last:border-0 hover:bg-muted/50 transition-colors animate-slide-up cursor-pointer"
+                    style={{ animationDelay: `${idx * 40}ms` }}
+                    onClick={() => setSelectedLead(lead)}
+                  >
+                    <td className="py-3">
+                      <div>
+                        <p className="font-medium">{lead.name}</p>
+                        <p className="text-xs text-muted-foreground">{lead.email}</p>
+                      </div>
+                    </td>
+                    <td className="py-3 text-muted-foreground">{lead.companyName || '—'}</td>
+                    <td className="py-3">
+                      <Badge variant="secondary" className={getStageBadgeClass(lead.status)}>
+                        {lead.status}
+                      </Badge>
+                    </td>
+                    <td className="py-3">
+                      {lead.addedBy ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700">
+                          <UserPlus className="h-3 w-3" />
+                          {lead.addedBy}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="py-3">
+                      <span className="text-xs font-medium">{lead.assignedAgent || '—'}</span>
+                    </td>
+                    <td className="py-3">
+                      {lead.callAgents && lead.callAgents.length > 0 ? (
+                        <div className="flex flex-wrap gap-1">
+                          {lead.callAgents.map((agent: string) => (
+                            <span
+                              key={agent}
+                              className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-2.5 py-0.5 text-xs font-medium text-violet-700"
+                            >
+                              <Phone className="h-3 w-3" />
+                              {agent}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">No calls</span>
+                      )}
+                    </td>
+                    <td className="py-3">
+                      {lead.closedBy ? (
+                        <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
+                          <CheckCircle2 className="h-3 w-3" />
+                          {lead.closedBy}
+                        </span>
+                      ) : (
+                        <span className="text-muted-foreground text-xs">—</span>
+                      )}
+                    </td>
+                    <td className="py-3 text-center font-medium">{lead.callCount || 0}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Lead Detail Dialog */}
+      <Dialog open={!!selectedLead} onOpenChange={(open) => !open && setSelectedLead(null)}>
+        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-primary" />
+              {selectedLead?.name} — Lead Details
+            </DialogTitle>
+          </DialogHeader>
+          {selectedLead && <LeadDetailContent lead={selectedLead} />}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function LeadDetailContent({ lead }: { lead: any }) {
+  return (
+
+    <div className="space-y-6">
+      {/* Lead Info */}
+      <div className="rounded-xl border border-border bg-card p-4">
+        <div className="grid grid-cols-2 gap-4 text-sm">
+          <InfoRow label="Name" value={lead.name} />
+          <InfoRow label="Email" value={lead.email} />
+          <InfoRow label="Company" value={lead.companyName} />
+          <InfoRow label="Phone" value={lead.phone} />
+          <InfoRow label="City" value={lead.city} />
+          <InfoRow label="State" value={lead.state} />
+          <InfoRow label="Source" value={lead.source} />
+          <InfoRow label="Status" value={lead.status} />
+          <InfoRow label="Assigned To" value={lead.assignedAgent} />
+          {lead.closedAt && <InfoRow label="Closed Date" value={lead.closedAt} />}
+        </div>
+      </div>
+
+      {/* Attribution */}
+      <div>
+        <h3 className="text-sm font-semibold mb-3 text-foreground">Attribution</h3>
+        <div className="grid grid-cols-3 gap-3">
+          <div className="rounded-xl border border-border bg-blue-50/50 p-3 text-center">
+            <UserPlus className="h-4 w-4 text-blue-600 mx-auto mb-1" />
+            <p className="text-xs text-muted-foreground">Added By</p>
+            <p className="text-sm font-medium">{lead.addedBy || '—'}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-violet-50/50 p-3 text-center">
+            <Phone className="h-4 w-4 text-violet-600 mx-auto mb-1" />
+            <p className="text-xs text-muted-foreground">Called By</p>
+            <p className="text-sm font-medium">{lead.callAgents?.join(', ') || '—'}</p>
+          </div>
+          <div className="rounded-xl border border-border bg-emerald-50/50 p-3 text-center">
+            <CheckCircle2 className="h-4 w-4 text-emerald-600 mx-auto mb-1" />
+            <p className="text-xs text-muted-foreground">Closed By</p>
+            <p className="text-sm font-medium">{lead.closedBy || '—'}</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Call History */}
+      {lead.callHistory?.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold mb-3 text-foreground">Call History ({lead.callHistory.length})</h3>
+          <div className="space-y-2">
+            {lead.callHistory.map((call: any, i: number) => (
+              <div key={i} className="flex items-center gap-3 rounded-xl border border-border p-3 text-sm hover:bg-muted/30 transition-colors">
+                <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
+                <div className="flex-1">
+                  <p className="font-medium">{call.agentName}</p>
+                  <p className="text-xs text-muted-foreground">{call.date} · {call.duration}</p>
+                </div>
+                <Badge variant="secondary" className={
+                  call.status === 'Completed' ? 'bg-emerald-100 text-emerald-700'
+                    : call.status === 'Missed' ? 'bg-red-100 text-red-700'
+                      : 'bg-amber-100 text-amber-700'
+                }>
+                  {call.status}
+                </Badge>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Activity Log */}
+      {lead.activities?.length > 0 && (
+        <div>
+          <h3 className="text-sm font-semibold mb-3 text-foreground">Activity Log</h3>
+          <div className="space-y-2">
+            {lead.activities.map((act: any, i: number) => (
+              <div key={i} className="flex items-start gap-3 rounded-xl border border-border p-3 text-sm hover:bg-muted/30 transition-colors">
+                <div className="h-2 w-2 rounded-full bg-primary mt-1.5 shrink-0" />
+                <div>
+                  <p className="text-muted-foreground">{act.description}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">
+                    {act.agent} · {act.timestamp}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Notes */}
+      {lead.notes && (
+        <div>
+          <h3 className="text-sm font-semibold mb-2 text-foreground">Notes</h3>
+          <p className="text-sm text-muted-foreground bg-muted/50 rounded-xl p-3">{lead.notes}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function InfoRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="font-medium">{value || '—'}</p>
+    </div>
+  );
+}

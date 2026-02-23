@@ -25,8 +25,8 @@
     --muted: 30 30% 90%;
     --muted-foreground: 210 30% 40%;
 
-    --accent: 38 92% 55%;
-    --accent-foreground: 0 0% 100%;
+    --accent: 30 30% 94%;
+    --accent-foreground: 210 62% 16%;
 
     --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
@@ -37,9 +37,8 @@
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 100%;
 
-    /* Dark Blue Border: #0F2A44 */
-    --border: 210 50% 30%;
-    --input: 210 50% 30%;
+    --border: 30 20% 82%;
+    --input: 30 20% 82%;
     --ring: 38 92% 55%;
 
     --radius: 0.625rem;
@@ -107,43 +106,104 @@
     @apply bg-background text-foreground antialiased;
     font-family: 'Inter', system-ui, -apple-system, sans-serif;
   }
+
+  /* Smoother scrollbars globally */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 9999px;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground) / 0.5);
+  }
+
+  /* Selection color */
+  ::selection {
+    background: hsl(var(--primary) / 0.2);
+    color: hsl(var(--foreground));
+  }
+
+  /* Shimmer keyframes for CSS utility */
+  @keyframes shimmer {
+    from {
+      background-position: -200% center;
+    }
+
+    to {
+      background-position: 200% center;
+    }
+  }
 }
 
 @layer utilities {
   .gradient-primary {
     background: var(--gradient-primary);
   }
+
   .gradient-hero {
     background: var(--gradient-hero);
   }
+
   .shadow-card {
     box-shadow: var(--shadow-card);
   }
+
   .shadow-card-hover {
     box-shadow: var(--shadow-card-hover);
   }
+
   .shadow-elevated {
     box-shadow: var(--shadow-elevated);
   }
 
   /* Stagger animation delays */
-  .stagger-1 { animation-delay: 0.05s; }
-  .stagger-2 { animation-delay: 0.10s; }
-  .stagger-3 { animation-delay: 0.15s; }
-  .stagger-4 { animation-delay: 0.20s; }
-  .stagger-5 { animation-delay: 0.25s; }
-  .stagger-6 { animation-delay: 0.30s; }
-  .stagger-7 { animation-delay: 0.35s; }
-  .stagger-8 { animation-delay: 0.40s; }
+  .stagger-1 {
+    animation-delay: 0.05s;
+  }
+
+  .stagger-2 {
+    animation-delay: 0.10s;
+  }
+
+  .stagger-3 {
+    animation-delay: 0.15s;
+  }
+
+  .stagger-4 {
+    animation-delay: 0.20s;
+  }
+
+  .stagger-5 {
+    animation-delay: 0.25s;
+  }
+
+  .stagger-6 {
+    animation-delay: 0.30s;
+  }
+
+  .stagger-7 {
+    animation-delay: 0.35s;
+  }
+
+  .stagger-8 {
+    animation-delay: 0.40s;
+  }
 
   /* Shimmer text / skeleton */
   .shimmer-text {
-    background: linear-gradient(
-      90deg,
-      hsl(var(--foreground)) 0%,
-      hsl(var(--foreground) / 0.55) 40%,
-      hsl(var(--foreground)) 80%
-    );
+    background: linear-gradient(90deg,
+        hsl(var(--foreground)) 0%,
+        hsl(var(--foreground) / 0.55) 40%,
+        hsl(var(--foreground)) 80%);
     background-size: 200% auto;
     -webkit-background-clip: text;
     background-clip: text;
@@ -155,6 +215,7 @@
   .glow-card {
     transition: box-shadow 0.3s ease, transform 0.3s ease;
   }
+
   .glow-card:hover {
     box-shadow: 0 0 0 2px hsl(var(--primary) / 0.3), var(--shadow-elevated);
     transform: translateY(-3px);
@@ -164,6 +225,7 @@
   .gradient-border {
     position: relative;
   }
+
   .gradient-border::before {
     content: '';
     position: absolute;
@@ -176,6 +238,7 @@
     opacity: 0;
     transition: opacity 0.3s;
   }
+
   .gradient-border:hover::before {
     opacity: 1;
   }
@@ -188,5 +251,55 @@
   .animate-slide-in-left,
   .animate-bounce-in {
     animation-fill-mode: both;
+  }
+
+  /* Mobile: prevent iOS text zoom on input focus */
+  @media (max-width: 639px) {
+
+    input[type="text"],
+    input[type="email"],
+    input[type="password"],
+    input[type="number"],
+    input[type="tel"],
+    input[type="search"],
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+
+  /* Smooth horizontal scroll areas */
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: thin;
+  }
+
+  .overflow-x-auto::-webkit-scrollbar {
+    height: 4px;
+  }
+
+  .overflow-x-auto::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .overflow-x-auto::-webkit-scrollbar-thumb {
+    background: hsl(var(--border));
+    border-radius: 9999px;
+  }
+
+  /* Disable hover effects on touch devices for better performance */
+  @media (hover: none) {
+    .hover\:-translate-y-1:hover {
+      transform: none !important;
+    }
+
+    .hover\:scale-105:hover {
+      transform: none !important;
+    }
+
+    .glow-card:hover {
+      box-shadow: var(--shadow-card);
+      transform: none;
+    }
   }
 }

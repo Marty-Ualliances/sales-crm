@@ -59,13 +59,32 @@ router.post('/', auth, async (req: AuthRequest, res: Response) => {
     if (data.leadId) {
       const Lead = (await import('../models/Lead')).default;
       const lead = await Lead.findById(data.leadId);
-      if (lead && ['Positive', 'Meeting Done', 'Closed'].includes(lead.status)) {
+      if (lead && ['Meeting Completed', 'Negotiation', 'Closed Won'].includes(lead.status)) {
         data.recordingFlagged = true;
       }
     }
 
     const call = new Call(data);
     await call.save();
+
+    // Auto-update lead stats when a call is logged
+    if (data.leadId) {
+      const Lead = (await import('../models/Lead')).default;
+      const lead = await Lead.findById(data.leadId);
+      if (lead) {
+        lead.callCount = (lead.callCount || 0) + 1;
+        lead.lastActivity = new Date();
+        // Option to add activity log if standard API usage doesn't already
+        lead.activities.push({
+          type: 'call',
+          description: data.notes || 'Call logged',
+          timestamp: new Date(),
+          agent: data.agentName || 'Unknown',
+        });
+        await lead.save();
+      }
+    }
+
     res.status(201).json(call);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });

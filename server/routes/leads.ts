@@ -6,7 +6,7 @@ import { notifyLeadStatusChange, notifyNewLead, notifyFollowUpDue, notifyLeadImp
 import { getIO } from '../socket';
 
 function emitLeadChange(action: string, data?: any) {
-  try { getIO().emit('lead:changed', { action, ...(data || {}) }); } catch (_) {}
+  try { getIO().emit('lead:changed', { action, ...(data || {}) }); } catch (_) { }
 }
 
 const router = Router();
@@ -128,11 +128,12 @@ router.get('/kpis', auth, async (req: AuthRequest, res: Response) => {
     const totalCalls = leads.reduce((sum, l) => sum + l.callCount, 0);
     const sevenDaysAgo = new Date(today.getTime() - 7 * 86400000);
     const recentActivity = leads.filter(l => l.lastActivity >= sevenDaysAgo).length;
-    const followUpsRemaining = leads.filter(l => l.nextFollowUp && l.status !== 'Closed' && l.status !== 'Lost').length;
-    const overdueFollowUps = leads.filter(l => l.nextFollowUp && l.nextFollowUp < today && l.status !== 'Closed' && l.status !== 'Lost').length;
-    const closedCount = leads.filter(l => l.status === 'Closed').length;
+    const followUpsRemaining = leads.filter(l => l.nextFollowUp && l.status !== 'Closed Won' && l.status !== 'Closed Lost').length;
+    const overdueFollowUps = leads.filter(l => l.nextFollowUp && l.nextFollowUp < today && l.status !== 'Closed Won' && l.status !== 'Closed Lost').length;
+    const closedCount = leads.filter(l => l.status === 'Closed Won').length;
     const conversionRate = totalLeads > 0 ? Math.round((closedCount / totalLeads) * 100) : 0;
     const totalRevenue = leads.reduce((sum, l) => sum + (l.revenue || 0), 0);
+    const appointmentsBooked = leads.filter(l => l.status === 'Meeting Booked' || l.status === 'Meeting Completed').length;
 
     res.json({
       totalLeads,
@@ -140,11 +141,59 @@ router.get('/kpis', auth, async (req: AuthRequest, res: Response) => {
       recentActivity,
       followUpsRemaining,
       overdueFollowUps,
-      appointmentsBooked: 12,
+      appointmentsBooked,
       conversionRate,
       totalRevenue,
     });
   } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// GET /api/leads/funnel — admin funnel KPI metrics
+router.get('/funnel', auth, adminOnly, async (_req: AuthRequest, res: Response) => {
+  try {
+    const leads = await Lead.find({}).lean();
+    const { PIPELINE_STAGES } = await import('../constants/pipeline');
+
+    const total = leads.length || 1; // avoid div/0
+    const stages = PIPELINE_STAGES.map(s => {
+      const count = leads.filter((l: any) => l.status === s.key).length;
+      return { stage: s.key, label: s.label, count, pct: Math.round((count / total) * 100) };
+    });
+
+    const closedWon = leads.filter((l: any) => l.status === 'Closed Won').length;
+    const conversionRate = Math.round((closedWon / total) * 100);
+    const totalRevenue = leads.reduce((sum: number, l: any) => sum + (l.revenue || 0), 0);
+
+    // Per-agent breakdown
+    const agentMap: Record<string, { total: number; closedWon: number; meetings: number }> = {};
+    for (const lead of leads as any[]) {
+      const a = lead.assignedAgent || 'Unassigned';
+      if (!agentMap[a]) agentMap[a] = { total: 0, closedWon: 0, meetings: 0 };
+      agentMap[a].total++;
+      if (lead.status === 'Closed Won') agentMap[a].closedWon++;
+      if (lead.status === 'Meeting Booked' || lead.status === 'Meeting Completed') agentMap[a].meetings++;
+    }
+    const byAgent = Object.entries(agentMap)
+      .map(([name, stats]) => ({ name, ...stats }))
+      .sort((a, b) => b.total - a.total);
+
+    // Avg days in stage (for stuck leads)
+    const now = Date.now();
+    const avgDaysNew = (() => {
+      const newLeads = leads.filter((l: any) => l.status === 'New Lead') as any[];
+      if (!newLeads.length) return 0;
+      const sum = newLeads.reduce((s: number, l: any) => {
+        const created = l.createdAt ? new Date(l.createdAt).getTime() : now;
+        return s + (now - created) / 86400000;
+      }, 0);
+      return Math.round(sum / newLeads.length);
+    })();
+
+    res.json({ stages, conversionRate, totalRevenue, closedWon, byAgent, avgDaysNew, totalLeads: leads.length });
+  } catch (err) {
+    console.error('Funnel KPI error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
@@ -207,7 +256,7 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
           source: 'CSV Import',
           date: new Date(),
           assignedAgent: defaultAgent,
-          status: 'New',
+          status: 'New Lead',
         };
 
         headerMap.forEach((field, idx) => {
@@ -259,11 +308,23 @@ router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
     const oldLead = await Lead.findById(req.params.id);
 
     // Track who closed the lead
-    if (req.body.status === 'Closed' && oldLead && oldLead.status !== 'Closed') {
+    if (req.body.status === 'Closed Won' && oldLead && oldLead.status !== 'Closed Won') {
       const User = (await import('../models/User')).default;
       const currentUser = await User.findById(req.user!.id);
       req.body.closedBy = currentUser?.name || 'Unknown';
       req.body.closedAt = new Date();
+    }
+
+    // Push stageHistory entry on status change
+    if (oldLead && req.body.status && oldLead.status !== req.body.status) {
+      const User2 = (await import('../models/User')).default;
+      const currentUser2 = await User2.findById(req.user!.id);
+      if (!req.body.$push) req.body.$push = {};
+      req.body.$push.stageHistory = {
+        stage: req.body.status,
+        enteredAt: new Date(),
+        agent: currentUser2?.name || 'Unknown',
+      };
     }
 
     const lead = await Lead.findByIdAndUpdate(req.params.id, req.body, { new: true });
@@ -298,7 +359,7 @@ router.post('/:id/complete-followup', auth, async (req: AuthRequest, res: Respon
     });
     lead.nextFollowUp = null;
     lead.lastActivity = new Date();
-    if (lead.status === 'New') lead.status = 'Contacted';
+    if (lead.status === 'New Lead') lead.status = 'Working' as any;
 
     // Optionally update user stats
     if (currentUser) {
@@ -328,7 +389,7 @@ router.post('/:id/schedule-followup', auth, async (req: AuthRequest, res: Respon
 
     lead.nextFollowUp = new Date(date);
     lead.lastActivity = new Date();
-    if (lead.status === 'New') lead.status = 'Follow-up';
+    if (lead.status === 'New Lead') lead.status = 'Working' as any;
     lead.activities.push({
       type: 'follow-up',
       description: `Follow-up scheduled for ${new Date(date).toISOString().split('T')[0]}`,
@@ -372,6 +433,21 @@ router.post('/bulk-assign', auth, leadgenOrAdmin, async (req: AuthRequest, res: 
     );
     emitLeadChange('bulk-assigned', { count: result.modifiedCount, agentName });
     res.json({ updated: result.modifiedCount });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// POST /api/leads/bulk-delete — delete multiple leads at once
+router.post('/bulk-delete', auth, leadgenOrAdmin, async (req: AuthRequest, res: Response) => {
+  try {
+    const { leadIds } = req.body;
+    if (!Array.isArray(leadIds) || !leadIds.length) {
+      return res.status(400).json({ error: 'leadIds array is required' });
+    }
+    const result = await Lead.deleteMany({ _id: { $in: leadIds } });
+    emitLeadChange('bulk-deleted', { count: result.deletedCount });
+    res.json({ deleted: result.deletedCount });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }

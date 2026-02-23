@@ -13,6 +13,8 @@ export interface IUser extends Document {
   followUpsPending: number;
   conversionRate: number;
   revenueClosed: number;
+  resetToken?: string;
+  resetTokenExpiry?: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
 
@@ -29,6 +31,8 @@ const UserSchema = new Schema<IUser>(
     followUpsPending: { type: Number, default: 0 },
     conversionRate: { type: Number, default: 0 },
     revenueClosed: { type: Number, default: 0 },
+    resetToken: { type: String, default: undefined },
+    resetTokenExpiry: { type: Date, default: undefined },
   },
   { timestamps: true }
 );
