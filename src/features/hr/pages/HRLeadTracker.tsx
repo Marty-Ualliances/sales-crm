@@ -1,12 +1,13 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { useHRLeads, useAgents } from '@/hooks/useApi';
-import { Search, Users, UserPlus, Phone, CheckCircle2, Loader2, Calendar, Building2 } from 'lucide-react';
+import { Search, Users, UserPlus, Phone, CheckCircle2, Loader2, Calendar, Building2, SlidersHorizontal, X } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 import KPICard from '@/components/common/KPICard';
-import { PIPELINE_STAGES, getStageBadgeClass, TERMINAL_STAGES } from '@/features/leads/constants/pipeline';
+import { PIPELINE_STAGES, getStageBadgeClass, TERMINAL_STAGES, PRIORITY_KEYS } from '@/features/leads/constants/pipeline';
 
 export default function HRLeadTracker() {
   const [search, setSearch] = useState('');
@@ -14,11 +15,30 @@ export default function HRLeadTracker() {
   const [userFilter, setUserFilter] = useState('all');
   const [selectedLead, setSelectedLead] = useState<any>(null);
   const { data: agents = [] } = useAgents();
-  const { data: leads = [], isLoading } = useHRLeads({
+  const [priorityFilter, setPriorityFilter] = useState<'A' | 'B' | 'C' | 'all'>('all');
+  const [filterOpen, setFilterOpen] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) setFilterOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const { data: apiLeads = [], isLoading } = useHRLeads({
     status: statusFilter,
     search: search || undefined,
     agent: userFilter === 'all' ? undefined : userFilter,
   });
+
+  const leads = useMemo(() => {
+    if (priorityFilter === 'all') return apiLeads;
+    return apiLeads.filter((l: any) => l.priority === priorityFilter);
+  }, [apiLeads, priorityFilter]);
+
+  const activeFilterCount = (statusFilter !== 'all' ? 1 : 0) + (priorityFilter !== 'all' ? 1 : 0) + (userFilter !== 'all' ? 1 : 0);
 
   if (isLoading) {
     return (
@@ -55,7 +75,8 @@ export default function HRLeadTracker() {
       </div>
 
       {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3 animate-slide-up stagger-5">
+      {/* Search + Filter Button */}
+      <div className="flex gap-3 items-center animate-slide-up stagger-5">
         <div className="relative flex-1">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
@@ -65,29 +86,126 @@ export default function HRLeadTracker() {
             className="pl-9"
           />
         </div>
-        <Select value={userFilter} onValueChange={setUserFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="All Users" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Users</SelectItem>
-            {agents.map((agent: any) => (
-              <SelectItem key={agent.id} value={agent.name}>{agent.name}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-[180px]">
-            <SelectValue placeholder="Filter by status" />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All Statuses</SelectItem>
-            {PIPELINE_STAGES.map(s => (
-              <SelectItem key={s.key} value={s.key}>{s.label}</SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+
+        {/* Filter dropdown */}
+        <div className="relative" ref={filterRef}>
+          <Button
+            variant="outline"
+            className="h-10 gap-2 px-4"
+            onClick={() => setFilterOpen(!filterOpen)}
+          >
+            <SlidersHorizontal className="h-4 w-4" />
+            <span className="hidden sm:inline">Filters</span>
+            {activeFilterCount > 0 && (
+              <span className="flex h-5 w-5 items-center justify-center rounded-full bg-primary text-primary-foreground text-xs font-bold">
+                {activeFilterCount}
+              </span>
+            )}
+          </Button>
+
+          {filterOpen && (
+            <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-border bg-card shadow-elevated z-50 overflow-hidden animate-slide-up">
+              <div className="px-4 py-3 border-b border-border bg-secondary/30">
+                <div className="flex items-center justify-between">
+                  <p className="text-sm font-semibold text-foreground">Filters</p>
+                  {activeFilterCount > 0 && (
+                    <button
+                      onClick={() => { setStatusFilter('all'); setPriorityFilter('all'); setUserFilter('all'); }}
+                      className="text-xs text-primary hover:underline font-medium"
+                    >
+                      Clear all
+                    </button>
+                  )}
+                </div>
+              </div>
+
+              <div className="p-4 space-y-4 text-left">
+                {/* User */}
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-2">Team Member</label>
+                  <select
+                    value={userFilter}
+                    onChange={e => setUserFilter(e.target.value)}
+                    className="w-full h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                  >
+                    <option value="all">All Users</option>
+                    {agents.map((agent: any) => (
+                      <option key={agent.id} value={agent.name}>{agent.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Status */}
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-2">Status</label>
+                  <select
+                    value={statusFilter}
+                    onChange={e => setStatusFilter(e.target.value)}
+                    className="w-full h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
+                  >
+                    <option value="all">All Statuses</option>
+                    {PIPELINE_STAGES.map(s => (
+                      <option key={s.key} value={s.key}>{s.label}</option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Priority */}
+                <div>
+                  <label className="block text-xs font-medium text-muted-foreground mb-2">Priority</label>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setPriorityFilter('all')}
+                      className={`flex-1 h-9 rounded-lg border text-sm font-medium transition-colors ${priorityFilter === 'all' ? 'bg-primary text-primary-foreground border-primary' : 'border-input bg-background text-foreground hover:bg-secondary'}`}
+                    >
+                      All
+                    </button>
+                    {PRIORITY_KEYS.map(p => (
+                      <button
+                        key={p}
+                        onClick={() => setPriorityFilter(p as any)}
+                        className={`flex-1 h-9 rounded-lg border text-sm font-medium transition-colors ${priorityFilter === p ? 'bg-primary text-primary-foreground border-primary' : 'border-input bg-background text-foreground hover:bg-secondary'}`}
+                      >
+                        {p}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Active filter chips */}
+      {activeFilterCount > 0 && (
+        <div className="flex gap-2 flex-wrap">
+          {statusFilter !== 'all' && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+              Status: {statusFilter}
+              <button onClick={() => setStatusFilter('all')} className="hover:text-primary/70 transition-colors">
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
+          {priorityFilter !== 'all' && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+              Priority: {priorityFilter}
+              <button onClick={() => setPriorityFilter('all')} className="hover:text-primary/70 transition-colors">
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
+          {userFilter !== 'all' && (
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+              User: {userFilter}
+              <button onClick={() => setUserFilter('all')} className="hover:text-primary/70 transition-colors">
+                <X className="h-3 w-3" />
+              </button>
+            </span>
+          )}
+        </div>
+      )}
 
       {/* Leads Table */}
       <div className="rounded-xl border border-border bg-card shadow-card p-6">

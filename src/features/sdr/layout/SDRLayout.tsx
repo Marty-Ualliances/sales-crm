@@ -43,9 +43,7 @@ export default function SDRLayout({ children }: { children: ReactNode }) {
         <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] via-transparent to-black/[0.05] pointer-events-none" />
 
         <div className="relative flex h-16 items-center gap-2.5 px-6 border-b border-sidebar-border">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl gradient-primary shadow-[0_0_16px_hsl(var(--primary)/0.35)] animate-glow-pulse">
-            <Zap className="h-[18px] w-[18px] text-primary-foreground" />
-          </div>
+          <img src="/team-united-logo.png" alt="Team United" className="h-8" />
           <span className="text-lg font-bold text-sidebar-foreground tracking-tight">TeamUnited</span>
           <button className="ml-auto lg:hidden text-sidebar-foreground hover:text-white transition-colors" onClick={() => setSidebarOpen(false)}>
             <X className="h-5 w-5" />

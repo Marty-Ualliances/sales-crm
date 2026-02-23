@@ -15,6 +15,7 @@ import taskRoutes from './routes/tasks';
 import hrRoutes from './routes/hr';
 import noteRoutes from './routes/notes';
 import meetingRoutes from './routes/meetings';
+import outreachRoutes from './routes/outreach';
 import { initIO } from './socket';
 
 dotenv.config();
@@ -103,6 +104,7 @@ app.use('/api/tasks', taskRoutes);
 app.use('/api/hr', hrRoutes);
 app.use('/api/notes', noteRoutes);
 app.use('/api/meetings', meetingRoutes);
+app.use('/api/outreach', outreachRoutes);
 
 // Health check
 app.get('/api/health', (_req, res) => {

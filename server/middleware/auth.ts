@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 
 export interface AuthRequest extends Request {
-  user?: { id: string; role: string; email: string };
+  user?: { id: string; role: string; email: string; name: string };
 }
 
 function getJwtSecret(): string {
@@ -25,6 +25,7 @@ export function auth(req: AuthRequest, res: Response, next: NextFunction) {
       id: string;
       role: string;
       email: string;
+      name: string;
     };
     req.user = decoded;
     next();

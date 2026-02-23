@@ -7,3 +7,4 @@ export * from '@/features/notifications/hooks/useNotifications';
 export * from '@/features/hr/hooks/useHR';
 export * from '@/features/calendar/hooks/useTasks';
 export * from '@/features/notes/hooks/useNotes';
+export * from '@/features/outreach/hooks/useOutreach';

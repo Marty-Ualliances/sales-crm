@@ -47,10 +47,8 @@ export default function LoginPage() {
         <div className="relative z-10 flex flex-col justify-between p-12 text-white">
           <div>
             <Link to="/" className="flex items-center gap-2.5">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/20 backdrop-blur-md border border-white/10 shadow-[0_8px_32px_rgba(0,0,0,0.12)]">
-                <Zap className="h-5 w-5 text-white" />
-              </div>
-              <span className="text-2xl font-bold tracking-tight">TeamUnited</span>
+              <img src="/team-united-logo.png" alt="Team United" className="h-10" />
+              <span className="text-lg font-bold tracking-tight">TeamUnited</span>
             </Link>
           </div>
           <div>
@@ -85,9 +83,7 @@ export default function LoginPage() {
         >
           {/* Mobile brand */}
           <div className="lg:hidden flex items-center gap-2 mb-8">
-            <div className="flex h-8 w-8 items-center justify-center rounded-lg gradient-primary">
-              <Zap className="h-4 w-4 text-primary-foreground" />
-            </div>
+            <img src="/team-united-logo.png" alt="Team United" className="h-8" />
             <span className="text-lg font-bold text-foreground">TeamUnited</span>
           </div>
 

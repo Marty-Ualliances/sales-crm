@@ -2,6 +2,8 @@ import { useFunnel, useAgents, useKPIs } from '@/hooks/useApi';
 import { Loader2, TrendingUp, DollarSign, Users, Award, Target } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { PIPELINE_STAGES, getStageBadgeClass } from '@/features/leads/constants/pipeline';
+import DateFilter, { DateRange } from '@/components/common/DateFilter';
+import { useState } from 'react';
 
 function StatCard({ label, value, sub, icon: Icon, accent }: { label: string; value: string | number; sub?: string; icon: any; accent?: string }) {
   return (
@@ -22,6 +24,8 @@ export default function FunnelDashboardPage() {
   const { data: funnel, isLoading } = useFunnel();
   const { data: kpis } = useKPIs();
 
+  const [dateRange, setDateRange] = useState<DateRange>('last7days');
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -36,9 +40,12 @@ export default function FunnelDashboardPage() {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Funnel Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">End-to-end pipeline health and conversion metrics</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Funnel Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-1">End-to-end pipeline health and conversion metrics</p>
+        </div>
+        <DateFilter value={dateRange} onChange={setDateRange} />
       </div>
 
       {/* Summary KPIs */}

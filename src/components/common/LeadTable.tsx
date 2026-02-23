@@ -1,8 +1,10 @@
 import { Link, useNavigate, useLocation } from 'react-router-dom';
-import { Phone, Edit, CheckCircle } from 'lucide-react';
+import { Phone, Edit, CheckCircle, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Lead, LeadStatus } from '@/features/leads/types/leads';
-import { useCompleteFollowUp } from '@/hooks/useApi';
+import { useCompleteFollowUp, useCreateCall } from '@/hooks/useApi';
+import { useAuth } from '@/features/auth/context/AuthContext';
 import { toast } from 'sonner';
 import { getStageBadgeClass, getPriorityBadgeClass } from '@/features/leads/constants/pipeline';
 
@@ -15,6 +17,27 @@ export default function LeadTable({ leads, compact = false }: { leads: Lead[]; c
   const today = new Date().toISOString().split('T')[0];
   const navigate = useNavigate();
   const completeFollowUp = useCompleteFollowUp();
+  const createCall = useCreateCall();
+  const { user } = useAuth();
+
+  const handleLogCall = async (lead: Lead, note: string) => {
+    try {
+      const now = new Date();
+      await createCall.mutateAsync({
+        leadId: lead.id,
+        leadName: lead.name,
+        agentName: user?.name || 'Unknown Agent',
+        date: now.toISOString(),
+        time: now.toTimeString().slice(0, 5),
+        duration: '0 min',
+        status: 'Completed',
+        notes: note,
+      });
+      toast.success(`Call logged for ${lead.name}: ${note}`);
+    } catch (error) {
+      toast.error('Failed to log call');
+    }
+  };
 
   const handleComplete = async (lead: Lead) => {
     if (lead.nextFollowUp) {
@@ -121,11 +144,34 @@ export default function LeadTable({ leads, compact = false }: { leads: Lead[]; c
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1">
                         {lead.phone && (
-                          <a href={toTelUri(lead.phone)} title="Call Now">
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10">
-                              <Phone className="h-3.5 w-3.5" />
-                            </Button>
-                          </a>
+                          <div className="flex items-center">
+                            <a href={toTelUri(lead.phone)} title="Call Now">
+                              <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10 rounded-r-none">
+                                <Phone className="h-3.5 w-3.5" />
+                              </Button>
+                            </a>
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-5 text-primary hover:bg-primary/10 rounded-l-none border-l border-primary/20" title="Quick Log Call">
+                                  <ChevronDown className="h-3 w-3" />
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="end" className="w-48">
+                                <DropdownMenuItem onClick={() => handleLogCall(lead, 'Left VM')} className="cursor-pointer">
+                                  Left VM
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleLogCall(lead, 'Not Interested')} className="cursor-pointer">
+                                  Not Interested
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleLogCall(lead, 'OOO')} className="cursor-pointer">
+                                  OOO
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => handleLogCall(lead, 'Call back in a while')} className="cursor-pointer">
+                                  Call back in a while
+                                </DropdownMenuItem>
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          </div>
                         )}
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-secondary"
                           title="View Details" onClick={() => navigate(`${basePath}/leads/${lead.id}`)}>

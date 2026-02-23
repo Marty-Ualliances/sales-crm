@@ -7,6 +7,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { PIPELINE_STAGES, getStageBadgeClass } from '@/features/leads/constants/pipeline';
+import DateFilter, { DateRange, filterByDateRange } from '@/components/common/DateFilter';
 
 export default function AdminDashboard() {
   const { data: leads = [], isLoading: leadsLoading } = useLeads();
@@ -17,6 +18,10 @@ export default function AdminDashboard() {
   const navigate = useNavigate();
 
   const [selectedUser, setSelectedUser] = useState<string>('all');
+  const [dateRange, setDateRange] = useState<DateRange>('last7days');
+
+  // Filter leads for KPI cards
+  const filteredLeads = filterByDateRange(leads, dateRange);
 
   // Calculate new leads (last 7 days)
   const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
@@ -93,22 +98,30 @@ export default function AdminDashboard() {
 
   return (
     <div className="space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-1">Overview of all team activity</p>
+        </div>
+        <DateFilter value={dateRange} onChange={setDateRange} />
+      </div>
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="animate-slide-up stagger-1">
-          <KPICard title="New Leads" value={leads.filter((l: any) => l.status === 'New Lead').length} icon={UserPlus} link="/admin/leads" />
+          <KPICard title="New Leads" value={filteredLeads.filter((l: any) => l.status === 'New Lead').length} icon={UserPlus} link="/admin/leads" />
         </div>
         <div className="animate-slide-up stagger-2">
-          <KPICard title="In Progress" value={leads.filter((l: any) => l.status === 'Working').length} icon={AlertTriangle} link="/admin/leads" />
+          <KPICard title="In Progress" value={filteredLeads.filter((l: any) => l.status === 'Working').length} icon={AlertTriangle} link="/admin/leads" />
         </div>
         <div className="animate-slide-up stagger-3">
-          <KPICard title="Contacted" value={leads.filter((l: any) => l.status === 'Contacted').length} icon={Phone} link="/admin/leads" />
+          <KPICard title="Contacted" value={filteredLeads.filter((l: any) => l.status === 'Contacted').length} icon={Phone} link="/admin/leads" />
         </div>
         <div className="animate-slide-up stagger-4">
-          <KPICard title="Under Contract" value={leads.filter((l: any) => l.status === 'Qualified').length} icon={CheckCircle} link="/admin/leads" />
+          <KPICard title="Under Contract" value={filteredLeads.filter((l: any) => l.status === 'Qualified').length} icon={CheckCircle} link="/admin/leads" />
         </div>
         <div className="animate-slide-up stagger-5">
-          <KPICard title="Active Accounts" value={leads.filter((l: any) => l.status === 'Closed Won').length} icon={BarChart2} link="/admin/leads" />
+          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Closed Won').length} icon={BarChart2} link="/admin/leads" />
         </div>
       </div>
 
@@ -168,35 +181,71 @@ export default function AdminDashboard() {
           </button>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 auto-rows-fr">
-          {agents.map((agent: any, idx: number) => (
-            <div
-              key={agent.id}
-              className="rounded-xl border border-border bg-card p-4 shadow-card hover:-translate-y-1 hover:shadow-[0_8px_30px_hsl(var(--primary)/0.1)] transition-all duration-300 animate-slide-up flex flex-col group"
-              style={{ animationDelay: `${idx * 80}ms` }}
-            >
-              <div className="flex items-center gap-3 mb-3">
-                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground text-sm font-medium ring-2 ring-primary/20 group-hover:ring-primary/40 transition-all">
-                  {agent.avatar}
+          {agents.map((agent: any, idx: number) => {
+            const addedLeads = leads.filter((l: any) => l.addedBy === agent.name);
+            const convertedLeads = addedLeads.filter((l: any) => l.status === 'Closed Won');
+            const sdrMeetings = leads.filter((l: any) => l.assignedAgent === agent.name && (l.status === 'Meeting Booked' || l.status === 'Meeting Completed'));
+
+            return (
+              <div
+                key={agent.id}
+                className="rounded-xl border border-border bg-card p-4 shadow-card hover:-translate-y-1 hover:shadow-[0_8px_30px_hsl(var(--primary)/0.1)] transition-all duration-300 animate-slide-up flex flex-col group"
+                style={{ animationDelay: `${idx * 80}ms` }}
+              >
+                <div className="flex items-center gap-3 mb-3">
+                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground text-sm font-medium ring-2 ring-primary/20 group-hover:ring-primary/40 transition-all">
+                    {agent.avatar}
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-sm font-semibold text-foreground truncate">{agent.name}</p>
+                    <Badge variant={agent.role === 'admin' ? 'default' : 'secondary'} className="text-xs">
+                      {agent.role}
+                    </Badge>
+                  </div>
                 </div>
-                <div className="min-w-0">
-                  <p className="text-sm font-semibold text-foreground truncate">{agent.name}</p>
-                  <Badge variant={agent.role === 'admin' ? 'default' : 'secondary'} className="text-xs">
-                    {agent.role}
-                  </Badge>
+                <div className={`grid ${agent.role === 'sdr' ? 'grid-cols-3' : 'grid-cols-2'} gap-2 text-center mt-auto`}>
+                  {agent.role === 'leadgen' ? (
+                    <>
+                      <div className="rounded-md bg-secondary/50 p-2 text-center">
+                        <p className="text-lg font-bold text-foreground">{addedLeads.length}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Leads Added</p>
+                      </div>
+                      <div className="rounded-md bg-secondary/50 p-2 text-center">
+                        <p className="text-lg font-bold text-foreground">{convertedLeads.length}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Converted</p>
+                      </div>
+                    </>
+                  ) : agent.role === 'sdr' ? (
+                    <>
+                      <div className="rounded-md bg-secondary/50 p-2 flex flex-col items-center justify-center">
+                        <p className="text-base font-bold text-foreground leading-none mb-1">{agent.callsMade || 0}</p>
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Calls</p>
+                      </div>
+                      <div className="rounded-md bg-secondary/50 p-2 flex flex-col items-center justify-center">
+                        <p className="text-base font-bold text-foreground leading-none mb-1">{sdrMeetings.length}</p>
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Meetings</p>
+                      </div>
+                      <div className="rounded-md bg-secondary/50 p-2 flex flex-col items-center justify-center">
+                        <p className="text-base font-bold text-foreground leading-none mb-1">{agent.followUpsCompleted || 0}</p>
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Follow-ups</p>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="rounded-md bg-secondary/50 p-2">
+                        <p className="text-lg font-bold text-foreground">{agent.leadsAssigned}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Leads</p>
+                      </div>
+                      <div className="rounded-md bg-secondary/50 p-2">
+                        <p className="text-lg font-bold text-foreground">{agent.callsMade || 0}</p>
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Calls</p>
+                      </div>
+                    </>
+                  )}
                 </div>
               </div>
-              <div className="grid grid-cols-2 gap-2 text-center mt-auto">
-                <div className="rounded-md bg-secondary/50 p-2">
-                  <p className="text-lg font-bold text-foreground">{agent.leadsAssigned}</p>
-                  <p className="text-xs text-muted-foreground">Leads</p>
-                </div>
-                <div className="rounded-md bg-secondary/50 p-2">
-                  <p className="text-lg font-bold text-foreground">{agent.callsMade || 0}</p>
-                  <p className="text-xs text-muted-foreground">Calls</p>
-                </div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 

@@ -3,10 +3,18 @@ import { Users, FileSpreadsheet, UserCheck, UserX, TrendingUp, Upload } from 'lu
 import { Button } from '@/components/ui/button';
 import KPICard from '@/components/common/KPICard';
 import { useLeads, useAgents } from '@/hooks/useApi';
+import DateFilter, { DateRange, filterByDateRange } from '@/components/common/DateFilter';
+import { useState } from 'react';
+import { useAuth } from '@/features/auth/context/AuthContext';
 
 export default function LeadGenDashboard() {
-  const { data: leads = [], isLoading } = useLeads();
+  const { user } = useAuth();
+  const { data: allLeads = [], isLoading } = useLeads();
   const { data: agents = [] } = useAgents();
+
+  const [dateRange, setDateRange] = useState<DateRange>('last7days');
+  const leads = user?.role === 'admin' ? allLeads : allLeads.filter((l: any) => l.addedBy === user?.name);
+  const filteredLeads = filterByDateRange(leads, dateRange);
 
   const sdrs = agents.filter((a: any) => a.role === 'sdr');
   const totalLeads = leads.length;
@@ -35,12 +43,13 @@ export default function LeadGenDashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-bold text-foreground">Lead Gen Dashboard</h1>
           <p className="text-sm text-muted-foreground mt-1">Overview of your lead pipeline</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-2 items-center">
+          <DateFilter value={dateRange} onChange={setDateRange} />
           <Button asChild variant="outline">
             <Link to="/leadgen/leads">
               <Users className="h-4 w-4 mr-2" />
@@ -59,19 +68,19 @@ export default function LeadGenDashboard() {
       {/* Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="animate-slide-up stagger-1">
-          <KPICard title="New Leads" value={leads.filter((l: any) => l.status === 'New Lead').length} icon={Users} link="/leadgen/leads" />
+          <KPICard title="New Leads" value={filteredLeads.filter((l: any) => l.status === 'New Lead').length} icon={Users} link="/leadgen/leads" />
         </div>
         <div className="animate-slide-up stagger-2">
-          <KPICard title="In Progress" value={leads.filter((l: any) => l.status === 'Working').length} icon={TrendingUp} link="/leadgen/leads" />
+          <KPICard title="In Progress" value={filteredLeads.filter((l: any) => l.status === 'Working').length} icon={TrendingUp} link="/leadgen/leads" />
         </div>
         <div className="animate-slide-up stagger-3">
-          <KPICard title="Contacted" value={leads.filter((l: any) => l.status === 'Contacted').length} icon={UserCheck} link="/leadgen/leads" />
+          <KPICard title="Contacted" value={filteredLeads.filter((l: any) => l.status === 'Contacted').length} icon={UserCheck} link="/leadgen/leads" />
         </div>
         <div className="animate-slide-up stagger-4">
-          <KPICard title="Under Contract" value={leads.filter((l: any) => l.status === 'Qualified').length} icon={UserCheck} link="/leadgen/leads" />
+          <KPICard title="Under Contract" value={filteredLeads.filter((l: any) => l.status === 'Qualified').length} icon={UserCheck} link="/leadgen/leads" />
         </div>
         <div className="animate-slide-up stagger-5">
-          <KPICard title="Active Accounts" value={leads.filter((l: any) => l.status === 'Closed Won').length} icon={UserCheck} link="/leadgen/leads" />
+          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Closed Won').length} icon={UserCheck} link="/leadgen/leads" />
         </div>
       </div>
 

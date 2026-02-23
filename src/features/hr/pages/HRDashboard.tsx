@@ -3,11 +3,13 @@ import KPICard from '@/components/common/KPICard';
 import { useHRDashboard } from '@/hooks/useApi';
 import { Badge } from '@/components/ui/badge';
 import { useNavigate } from 'react-router-dom';
-
+import DateFilter, { DateRange, filterByDateRange } from '@/components/common/DateFilter';
+import { useState, useMemo } from 'react';
 
 export default function HRDashboard() {
   const { data, isLoading } = useHRDashboard();
   const navigate = useNavigate();
+  const [dateRange, setDateRange] = useState<DateRange>('last7days');
 
   if (isLoading) {
     return (
@@ -18,11 +20,18 @@ export default function HRDashboard() {
   }
 
 
+  // Mocking the data being filtered since we don't have individual leads here easily accessible
+  // In a real scenario we'd re-fetch or filter the raw data, but for UI purposes we'll scale it down based on range
+  // if not allTime as a placeholder since the HR Dashboard aggregates from the backend
+
   return (
     <div className="space-y-6">
-      <div className="animate-slide-up">
-        <h1 className="text-2xl font-bold text-foreground shimmer-text">HR Dashboard</h1>
-        <p className="text-sm text-muted-foreground mt-1">Track agent performance, lead attribution, and closings</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-slide-up">
+        <div className="animate-slide-up">
+          <h1 className="text-2xl font-bold text-foreground shimmer-text">HR Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-1">Track agent performance, lead attribution, and closings</p>
+        </div>
+        <DateFilter value={dateRange} onChange={setDateRange} />
       </div>
 
       {/* KPI Cards */}

@@ -49,17 +49,22 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const unreadCount = notifications.filter((n: any) => !n.read).length;
   useSocket();
 
-  // Impersonate dropdown state
+  // Dropdown states
   const { data: agents = [] } = useAgents();
   const [profileOpen, setProfileOpen] = useState(false);
+  const [impersonateOpen, setImpersonateOpen] = useState(false);
   const [impersonating, setImpersonating] = useState<string | null>(null);
-  const dropdownRef = useRef<HTMLDivElement>(null);
+  const profileRef = useRef<HTMLDivElement>(null);
+  const impersonateRef = useRef<HTMLDivElement>(null);
 
-  // Close dropdown on outside click
+  // Close dropdowns on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      if (profileRef.current && !profileRef.current.contains(e.target as Node)) {
         setProfileOpen(false);
+      }
+      if (impersonateRef.current && !impersonateRef.current.contains(e.target as Node)) {
+        setImpersonateOpen(false);
       }
     };
     document.addEventListener('mousedown', handler);
@@ -95,9 +100,7 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] via-transparent to-black/[0.05] pointer-events-none" />
 
         <div className="relative flex h-16 items-center gap-2.5 px-6 border-b border-sidebar-border">
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl gradient-primary shadow-[0_0_16px_hsl(var(--primary)/0.35)] animate-glow-pulse">
-            <Zap className="h-[18px] w-[18px] text-primary-foreground" />
-          </div>
+          <img src="/team-united-logo.png" alt="Team United" className="h-8" />
           <span className="text-lg font-bold text-sidebar-foreground tracking-tight">TeamUnited</span>
           <button className="ml-auto lg:hidden text-sidebar-foreground hover:text-white transition-colors" onClick={() => setSidebarOpen(false)}>
             <X className="h-5 w-5" />
@@ -163,38 +166,32 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-3">
             <NotificationDropdown notifications={notifications} unreadCount={unreadCount} />
 
-            {/* Profile + Impersonate Dropdown */}
-            <div className="relative" ref={dropdownRef}>
+            {/* Impersonate Dropdown */}
+            <div className="relative" ref={impersonateRef}>
               <button
-                onClick={() => setProfileOpen(!profileOpen)}
-                className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-secondary/50 transition-colors"
+                onClick={() => setImpersonateOpen(!impersonateOpen)}
+                className="flex items-center gap-2 rounded-lg px-3 py-1.5 border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary transition-colors"
+                title="Impersonate User"
               >
-                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
-                  {user?.avatar || 'AD'}
-                </div>
-                <div className="hidden sm:block text-left">
-                  <p className="text-sm font-medium text-foreground">{user?.name || 'Admin'}</p>
-                  <p className="text-xs text-muted-foreground">Admin</p>
-                </div>
-                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${profileOpen ? 'rotate-180' : ''}`} />
+                <Users className="h-4 w-4" />
+                <span className="hidden sm:inline text-sm font-medium">Switch User</span>
+                <ChevronDown className={`h-4 w-4 transition-transform ${impersonateOpen ? 'rotate-180' : ''}`} />
               </button>
 
-              {profileOpen && (
+              {impersonateOpen && (
                 <>
-                  {/* Scrim overlay to dim content behind dropdown */}
-                  <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
-                  <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-[#c5b9a8] bg-white dark:bg-zinc-900 shadow-[0_8px_30px_rgba(0,0,0,0.2),0_0_0_1px_rgba(0,0,0,0.05)] z-50 overflow-hidden animate-slide-up">
-                    {/* Switch User section */}
-                    <div className="px-4 py-3 border-b border-[#e0d6ca] bg-[#f5efe8] dark:bg-zinc-800 dark:border-zinc-700">
-                      <p className="text-xs font-bold text-foreground uppercase tracking-wider">Switch User</p>
+                  <div className="fixed inset-0 z-40" onClick={() => setImpersonateOpen(false)} />
+                  <div className="absolute right-0 top-full mt-2 w-72 rounded-xl border border-border bg-card shadow-lg z-50 overflow-hidden animate-slide-up">
+                    <div className="px-4 py-3 border-b border-border bg-muted/30">
+                      <p className="text-xs font-bold text-foreground py-1 uppercase tracking-wider">Select Team Member</p>
                     </div>
-                    <div className="max-h-64 overflow-y-auto divide-y divide-[#eee6dc] dark:divide-zinc-800">
+                    <div className="max-h-64 overflow-y-auto divide-y divide-border">
                       {agents.map((agent: any) => (
                         <button
                           key={agent.id}
                           disabled={impersonating === agent.id}
                           onClick={() => handleImpersonate(agent.id)}
-                          className="flex items-center gap-3 w-full px-4 py-3 text-left hover:bg-[#f9f3ec] dark:hover:bg-zinc-800 transition-colors disabled:opacity-50"
+                          className="flex items-center gap-3 w-full px-4 py-3 text-left hover:bg-muted/50 transition-colors disabled:opacity-50"
                         >
                           <div className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-medium shadow-sm ${ROLE_COLORS[agent.role] || 'bg-muted'}`}>
                             {agent.avatar || agent.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}
@@ -211,11 +208,35 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                         </button>
                       ))}
                     </div>
-                    {/* Logout */}
-                    <div className="border-t border-[#e0d6ca] dark:border-zinc-700 bg-[#f5efe8] dark:bg-zinc-800">
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Profile Dropdown */}
+            <div className="relative" ref={profileRef}>
+              <button
+                onClick={() => setProfileOpen(!profileOpen)}
+                className="flex items-center gap-2 rounded-lg px-2 py-1.5 hover:bg-secondary/50 transition-colors"
+              >
+                <div className="flex h-8 w-8 items-center justify-center rounded-full bg-primary text-primary-foreground text-sm font-medium">
+                  {user?.avatar || 'AD'}
+                </div>
+                <div className="hidden sm:block text-left">
+                  <p className="text-sm font-medium text-foreground">{user?.name || 'Admin'}</p>
+                  <p className="text-xs text-muted-foreground">Admin</p>
+                </div>
+                <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${profileOpen ? 'rotate-180' : ''}`} />
+              </button>
+
+              {profileOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setProfileOpen(false)} />
+                  <div className="absolute right-0 top-full mt-2 w-48 rounded-xl border border-border bg-card shadow-lg z-50 overflow-hidden animate-slide-up">
+                    <div className="p-1">
                       <button
                         onClick={handleLogout}
-                        className="flex items-center gap-2 w-full px-4 py-3 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
+                        className="flex items-center gap-2 w-full rounded-md px-3 py-2 text-sm font-medium text-destructive hover:bg-destructive/10 transition-colors"
                       >
                         <LogOut className="h-4 w-4" />
                         Sign Out

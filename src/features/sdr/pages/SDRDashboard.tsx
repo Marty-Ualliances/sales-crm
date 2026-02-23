@@ -7,6 +7,8 @@ import { useLeads, useCalls, useAgents, useCreateCall } from '@/hooks/useApi';
 import { toast } from 'sonner';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { getCadenceTasks, TOUCH_TYPE_CONFIG, CADENCE_TEMPLATES } from '@/features/leads/constants/cadences';
+import DateFilter, { DateRange, filterByDateRange } from '@/components/common/DateFilter';
+import { useState } from 'react';
 
 export default function SDRDashboard() {
   const { user } = useAuth();
@@ -14,6 +16,8 @@ export default function SDRDashboard() {
   const { data: allCalls = [] } = useCalls();
   const { data: agents = [] } = useAgents();
   const createCall = useCreateCall();
+
+  const [dateRange, setDateRange] = useState<DateRange>('last7days');
 
   const handleCall = async (lead: any) => {
     if (!lead.phone) {
@@ -42,9 +46,12 @@ export default function SDRDashboard() {
   };
   const agent = agents.find((a: any) => a.name === user?.name);
 
-  // Filter to only this SDR's data
-  const leads = allLeads.filter((l: any) => !l.assignedAgent || l.assignedAgent === user?.name);
+  // Filter strictly to this SDR's data
+  const leads = allLeads.filter((l: any) => l.assignedAgent === user?.name);
   const calls = allCalls.filter((c: any) => c.agentName === user?.name);
+
+  // Apply DateFilter to leads for KPI cards
+  const filteredLeads = filterByDateRange(leads, dateRange);
 
   const today = new Date();
   const overdueFollowUps = leads.filter((l: any) =>
@@ -77,31 +84,34 @@ export default function SDRDashboard() {
   return (
     <div className="space-y-6">
       {/* Welcome banner */}
-      <div className="relative rounded-2xl overflow-hidden bg-gradient-to-r from-[hsl(var(--sidebar-background))] to-[hsl(210,50%,25%)] p-6 sm:p-8 text-white animate-slide-up">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full -translate-y-1/2 translate-x-1/3" />
-        <div className="absolute bottom-0 left-1/3 w-32 h-32 bg-white/5 rounded-full translate-y-1/2" />
-        <div className="relative">
-          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Welcome back, {user?.name?.split(' ')[0] || 'Agent'}! 🚀</h1>
-          <p className="text-white/70 mt-1.5 text-sm sm:text-base">Here's your personal performance overview</p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-slide-up">
+        <div className="relative rounded-2xl flex-1 overflow-hidden bg-gradient-to-r from-[hsl(var(--sidebar-background))] to-[hsl(210,50%,25%)] p-6 sm:p-8 text-white">
+          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full -translate-y-1/2 translate-x-1/3" />
+          <div className="absolute bottom-0 left-1/3 w-32 h-32 bg-white/5 rounded-full translate-y-1/2" />
+          <div className="relative">
+            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Welcome back, {user?.name?.split(' ')[0] || 'Agent'}! 🚀</h1>
+            <p className="text-white/70 mt-1.5 text-sm sm:text-base">Here's your personal performance overview</p>
+          </div>
         </div>
+        <DateFilter value={dateRange} onChange={setDateRange} />
       </div>
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="animate-slide-up stagger-1">
-          <KPICard title="New Leads" value={leads.filter((l: any) => l.status === 'New Lead').length} icon={Users} link="/sdr/leads" />
+          <KPICard title="New Leads" value={filteredLeads.filter((l: any) => l.status === 'New Lead').length} icon={Users} link="/sdr/leads" />
         </div>
         <div className="animate-slide-up stagger-2">
-          <KPICard title="In Progress" value={leads.filter((l: any) => l.status === 'Working').length} icon={AlertTriangle} link="/sdr/leads" />
+          <KPICard title="In Progress" value={filteredLeads.filter((l: any) => l.status === 'Working').length} icon={AlertTriangle} link="/sdr/leads" />
         </div>
         <div className="animate-slide-up stagger-3">
-          <KPICard title="Contacted" value={leads.filter((l: any) => l.status === 'Contacted').length} icon={Phone} link="/sdr/leads" />
+          <KPICard title="Contacted" value={filteredLeads.filter((l: any) => l.status === 'Contacted').length} icon={Phone} link="/sdr/leads" />
         </div>
         <div className="animate-slide-up stagger-4">
-          <KPICard title="Under Contract" value={leads.filter((l: any) => l.status === 'Qualified').length} icon={CheckCircle} link="/sdr/leads" />
+          <KPICard title="Under Contract" value={filteredLeads.filter((l: any) => l.status === 'Qualified').length} icon={CheckCircle} link="/sdr/leads" />
         </div>
         <div className="animate-slide-up stagger-5">
-          <KPICard title="Active Accounts" value={leads.filter((l: any) => l.status === 'Closed Won').length} icon={Target} link="/sdr/leads" />
+          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Closed Won').length} icon={Target} link="/sdr/leads" />
         </div>
       </div>
 
