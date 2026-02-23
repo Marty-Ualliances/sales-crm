@@ -1,3 +1,4 @@
+'use client';
 import { useState, useRef, useEffect } from 'react';
 import { Bell, Clock, AlertTriangle, UserPlus, Info } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';

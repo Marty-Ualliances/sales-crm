@@ -1,4 +1,6 @@
-import { useParams, Link, useLocation } from 'react-router-dom';
+'use client';
+import { usePathname, useParams } from 'next/navigation';
+import Link from 'next/link';
 import { ArrowLeft, Phone, Mail, User, Calendar, FileText, RefreshCw, Loader2, Building2, MapPin, Globe, Linkedin, Users, CheckCircle, PhoneCall, Send, ShieldCheck, AlertTriangle, Tag } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLead, useCalls, useCompleteFollowUp, useUpdateLead, useLeads, useCreateCall } from '@/hooks/useApi';
@@ -35,8 +37,9 @@ const activityColors: Record<string, string> = {
 };
 
 export default function LeadDetailPage() {
-  const { leadId } = useParams();
-  const { data: lead, isLoading } = useLead(leadId || '');
+  const params = useParams();
+  const leadId = params?.leadId as string | undefined;
+  const { data: lead, isLoading } = useLead(leadId ?? '');
   const { data: allCalls = [] } = useCalls();
   const completeFollowUp = useCompleteFollowUp();
   const updateLead = useUpdateLead();
@@ -50,10 +53,10 @@ export default function LeadDetailPage() {
   const [nextStepNote, setNextStepNote] = useState('');
   const [activeTab, setActiveTab] = useState<'team' | 'activity'>('team');
 
-  const location = useLocation();
-  const basePath = location.pathname.startsWith('/sdr') ? '/sdr' :
-    location.pathname.startsWith('/hr') ? '/hr' :
-      location.pathname.startsWith('/leadgen') ? '/leadgen' : '/admin';
+  const pathname = usePathname() ?? '';
+  const basePath = pathname.startsWith('/sdr') ? '/sdr' :
+    pathname.startsWith('/hr') ? '/hr' :
+      pathname.startsWith('/leadgen') ? '/leadgen' : '/admin';
 
   if (isLoading) {
     return (
@@ -67,7 +70,7 @@ export default function LeadDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <h2 className="text-xl font-bold text-foreground mb-2">Lead not found</h2>
-        <Link to={`${basePath}/leads`}><Button variant="outline">Back to Leads</Button></Link>
+        <Link href={`${basePath}/leads`}><Button variant="outline">Back to Leads</Button></Link>
       </div>
     );
   }
@@ -232,7 +235,7 @@ export default function LeadDetailPage() {
 
   const qualityGate = checkQualityGate(lead);
   const cadenceTasks = getCadenceTasks(lead.cadence);
-  const cadenceTemplate = lead.cadence ? CADENCE_TEMPLATES.find(t => t.key === lead.cadence.type) : null;
+  const cadenceTemplate = lead.cadence ? CADENCE_TEMPLATES.find(t => t.key === lead.cadence!.type) : null;
 
   // All phone numbers for display
   const phones = [
@@ -318,7 +321,7 @@ export default function LeadDetailPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div className="flex items-center gap-3">
-          <Link to={`${basePath}/leads`}>
+          <Link href={`${basePath}/leads`}>
             <Button variant="ghost" size="icon" className="h-9 w-9"><ArrowLeft className="h-4 w-4" /></Button>
           </Link>
           <div>
@@ -522,7 +525,7 @@ export default function LeadDetailPage() {
                         {teamMembers.map((member: any) => (
                           <Link
                             key={member.id || member._id}
-                            to={`${basePath}/leads/${member.id || member._id}`}
+                            href={`${basePath}/leads/${member.id || member._id}`}
                             className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-secondary/50 transition-colors"
                           >
                             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-secondary text-foreground text-sm font-medium shrink-0">
@@ -741,7 +744,7 @@ export default function LeadDetailPage() {
                   {leadCalls.length > 0 ? (
                     <div className="space-y-3 max-h-[300px] overflow-y-auto pr-2">
                       {leadCalls.map((call: any) => (
-                        <Link key={call.id} to={`${basePath}/calls/${call.id}`} className="flex items-center gap-3 p-3 rounded-lg hover:bg-secondary/50 transition-colors">
+                        <Link key={call.id} href={`${basePath}/calls/${call.id}`} className="flex items-center gap-3 p-3 rounded-lg hover:bg-secondary/50 transition-colors">
                           <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${call.status === 'Completed' ? 'bg-success/10 text-success' : call.status === 'Missed' ? 'bg-destructive/10 text-destructive' : 'bg-warning/10 text-warning'}`}>
                             <Phone className="h-4 w-4" />
                           </div>

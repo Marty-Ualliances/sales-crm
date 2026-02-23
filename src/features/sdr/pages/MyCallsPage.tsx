@@ -1,3 +1,4 @@
+'use client';
 import { useCalls } from '@/hooks/useApi';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { Phone, PlayCircle, Search, Loader2, Edit2 } from 'lucide-react';
@@ -8,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { useState } from 'react';
 import { toast } from 'sonner';
 
@@ -142,7 +143,7 @@ export default function MyCallsPage() {
                         <div>
                           {call.leadId ? (
                             <Link
-                              to={`/sdr/leads/${call.leadId}`}
+                              href={`/sdr/leads/${call.leadId}`}
                               className="font-medium text-foreground hover:text-primary transition-colors underline-offset-2 hover:underline"
                             >
                               {call.leadName}

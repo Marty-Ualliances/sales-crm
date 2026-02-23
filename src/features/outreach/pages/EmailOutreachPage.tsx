@@ -1,3 +1,4 @@
+'use client';
 import { useState } from 'react';
 import { Mail, Send, CalendarDays, Loader2, Plus, ArrowRight } from 'lucide-react';
 import { Button } from '@/components/ui/button';

@@ -1,5 +1,6 @@
+'use client';
+import { useRouter } from 'next/navigation';
 import { LucideIcon } from 'lucide-react';
-import { useNavigate } from 'react-router-dom';
 
 interface KPICardProps {
   title: string;
@@ -39,16 +40,16 @@ const VARIANT_STYLES = {
 };
 
 export default function KPICard({ title, value, icon: Icon, change, variant = 'default', subtitle, link }: KPICardProps) {
-  const navigate = useNavigate();
+  const router = useRouter();
   const s = VARIANT_STYLES[variant];
 
   return (
     <div
       className={`relative rounded-xl border border-border bg-card p-5 shadow-card transition-all duration-300 border-l-4 ${s.border} ${s.glow} hover:-translate-y-1 ${link ? 'cursor-pointer' : ''} group overflow-hidden h-full flex flex-col justify-between`}
-      onClick={() => link && navigate(link)}
+      onClick={() => link && router.push(link)}
       role={link ? 'button' : undefined}
       tabIndex={link ? 0 : undefined}
-      onKeyDown={e => link && e.key === 'Enter' && navigate(link)}
+      onKeyDown={e => link && e.key === 'Enter' && router.push(link)}
     >
       {/* Corner gradient accent */}
       <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl ${s.accentGradient} rounded-bl-[100%] pointer-events-none opacity-60 group-hover:opacity-100 transition-opacity duration-500`} />

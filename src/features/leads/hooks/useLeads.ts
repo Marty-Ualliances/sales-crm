@@ -1,3 +1,4 @@
+'use client';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { api } from '@/services/api';
 
@@ -62,7 +63,43 @@ export function useUpdateLead() {
     const qc = useQueryClient();
     return useMutation({
         mutationFn: ({ id, data }: { id: string; data: any }) => api.leads.update(id, data),
-        onSuccess: (_data, vars) => {
+        onMutate: async ({ id, data }) => {
+            await qc.cancelQueries({ queryKey: ['leads'] });
+            await qc.cancelQueries({ queryKey: ['lead', id] });
+
+            const previousQueries = qc.getQueriesData({ queryKey: ['leads'] });
+            const previousLead = qc.getQueryData(['lead', id]);
+
+            if (data) {
+                qc.setQueryData(['lead', id], (old: any) => old ? { ...old, ...data } : old);
+                qc.setQueriesData({ queryKey: ['leads'] }, (old: any) => {
+                    if (!old) return old;
+                    if (Array.isArray(old)) {
+                        return old.map(lead => (lead._id === id || lead.id === id) ? { ...lead, ...data } : lead);
+                    }
+                    if (old.data && Array.isArray(old.data)) {
+                        return { ...old, data: old.data.map((lead: any) => (lead._id === id || lead.id === id) ? { ...lead, ...data } : lead) };
+                    }
+                    if (old.leads && Array.isArray(old.leads)) {
+                        return { ...old, leads: old.leads.map((lead: any) => (lead._id === id || lead.id === id) ? { ...lead, ...data } : lead) };
+                    }
+                    return old;
+                });
+            }
+
+            return { previousQueries, previousLead };
+        },
+        onError: (_err, { id }, context) => {
+            if (context?.previousLead) {
+                qc.setQueryData(['lead', id], context.previousLead);
+            }
+            if (context?.previousQueries) {
+                context.previousQueries.forEach(([queryKey, data]) => {
+                    qc.setQueryData(queryKey, data);
+                });
+            }
+        },
+        onSettled: (_data, _error, vars) => {
             qc.invalidateQueries({ queryKey: ['leads'] });
             qc.invalidateQueries({ queryKey: ['lead', vars.id] });
             qc.invalidateQueries({ queryKey: ['kpis'] });

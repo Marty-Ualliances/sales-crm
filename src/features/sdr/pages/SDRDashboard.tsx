@@ -1,5 +1,6 @@
+'use client';
 import { Users, Phone, AlertTriangle, Clock, CheckCircle, Loader2, Target, Calendar, Send, Linkedin, ArrowRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import KPICard from '@/components/common/KPICard';
 import LeadTable from '@/components/common/LeadTable';
@@ -173,7 +174,7 @@ export default function SDRDashboard() {
                   </div>
                 </div>
 
-                <Link to={`/sdr/leads/${task.lead.id || task.lead._id}`}>
+                <Link href={`/sdr/leads/${task.lead.id || task.lead._id}`}>
                   <Button variant="outline" size="sm" className="h-8 text-xs gap-1 group-hover:border-primary group-hover:text-primary transition-colors">
                     Execute <ArrowRight className="h-3 w-3" />
                   </Button>
@@ -191,7 +192,7 @@ export default function SDRDashboard() {
 
           {allCadenceTasks.length > 5 && (
             <div className="pt-2 text-center">
-              <Link to="/sdr/leads" className="text-xs text-primary hover:underline">
+              <Link href="/sdr/leads" className="text-xs text-primary hover:underline">
                 View {allCadenceTasks.length - 5} more actions
               </Link>
             </div>

@@ -1,3 +1,4 @@
+'use client';
 import { useAgents, useLeads, useCreateAgent, useDeleteAgent } from '@/hooks/useApi';
 import { Phone, CheckCircle, Clock, Users, Search, UserPlus, Mail, Trash2, Loader2, X, TrendingUp, DollarSign, ChevronRight } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';

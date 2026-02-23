@@ -1,5 +1,6 @@
+'use client';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import {
   ArrowRight, BarChart3, Bell, Clock,
@@ -28,18 +29,20 @@ export default function LandingPage() {
       {/* Nav */}
       <nav className="fixed top-0 left-0 right-0 z-50 border-b border-border/50 bg-background/80 backdrop-blur-md">
         <div className="container mx-auto flex h-16 items-center justify-between px-6">
-          <div className="flex items-center gap-2">
-            <img src="/team-united-logo.png" alt="Team United" className="h-8" />
-            <span className="text-lg font-bold text-foreground">TeamUnited</span>
+          <div className="flex items-center gap-3">
+            <div className="flex h-10 items-center justify-center rounded-xl bg-white/10 px-2 py-1 backdrop-blur-md border border-white/20 shadow-sm">
+              <img src="/team-united-logo.png" alt="United Alliances" className="h-6" />
+            </div>
+            <span className="text-xl font-bold tracking-tight text-foreground">United Alliances</span>
           </div>
           <div className="hidden md:flex items-center gap-8">
             <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Features</a>
           </div>
           <div className="flex items-center gap-3">
-            <Link to="/login">
+            <Link href="/login">
               <Button variant="ghost" size="sm">Log In</Button>
             </Link>
-            <Link to="/login">
+            <Link href="/login">
               <Button size="sm" className="gradient-primary border-0">Get Started</Button>
             </Link>
           </div>
@@ -69,7 +72,7 @@ export default function LandingPage() {
               to supercharge your insurance sales pipeline.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <Link to="/login">
+              <Link href="/login">
                 <Button size="lg" className="gradient-primary border-0 px-8 h-12 text-base">
                   Get Started
                   <ArrowRight className="ml-2 h-4 w-4" />
@@ -158,9 +161,11 @@ export default function LandingPage() {
       {/* Footer */}
       <footer className="border-t border-border py-10">
         <div className="container mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <img src="/team-united-logo.png" alt="Team United" className="h-6" />
-            <span className="font-semibold text-foreground">TeamUnited</span>
+          <div className="flex items-center gap-3">
+            <div className="flex items-center justify-center rounded-lg bg-foreground/5 px-2 py-1 backdrop-blur-sm border border-foreground/10">
+              <img src="/team-united-logo.png" alt="United Alliances" className="h-5 opacity-90" />
+            </div>
+            <span className="text-lg font-semibold text-foreground">United Alliances</span>
           </div>
           <p className="text-sm text-muted-foreground">© 2026 TeamUnited. All rights reserved.</p>
         </div>

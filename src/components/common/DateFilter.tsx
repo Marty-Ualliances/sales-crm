@@ -1,3 +1,5 @@
+'use client';
+
 import { CalendarDays } from 'lucide-react';
 
 export type DateRange = 'today' | 'yesterday' | 'last7days' | 'thisMonth' | 'allTime';

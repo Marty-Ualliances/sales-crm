@@ -1,10 +1,11 @@
+'use client';
+import { useRouter } from 'next/navigation';
 import { AlertTriangle, CalendarCheck, UserPlus, Loader2, BarChart2, Coffee, Phone, CheckCircle } from 'lucide-react';
 import KPICard from '@/components/common/KPICard';
 import RecentActivityFeed from '@/components/common/RecentActivityFeed';
 import { useLeads, useAgents, useKPIs, useFunnel, useCalls } from '@/hooks/useApi';
 import { Badge } from '@/components/ui/badge';
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import { PIPELINE_STAGES, getStageBadgeClass } from '@/features/leads/constants/pipeline';
 import DateFilter, { DateRange, filterByDateRange } from '@/components/common/DateFilter';
@@ -15,7 +16,7 @@ export default function AdminDashboard() {
   const { data: kpis, isLoading: kpisLoading } = useKPIs();
   const { data: funnel } = useFunnel();
   const { data: allCalls = [] } = useCalls();
-  const navigate = useNavigate();
+  const router = useRouter();
 
   const [selectedUser, setSelectedUser] = useState<string>('all');
   const [dateRange, setDateRange] = useState<DateRange>('last7days');
@@ -128,7 +129,7 @@ export default function AdminDashboard() {
       {/* Quick launch row */}
       <div className="flex flex-wrap gap-3">
         <button
-          onClick={() => navigate('/admin/huddle')}
+          onClick={() => router.push('/admin/huddle')}
           className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-5 py-3 text-sm font-medium text-foreground hover:border-primary/30 hover:shadow-[0_4px_20px_hsl(var(--primary)/0.1)] transition-all duration-300 shadow-card group"
         >
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-500/10 group-hover:bg-amber-500/20 transition-colors">
@@ -137,7 +138,7 @@ export default function AdminDashboard() {
           Daily Huddle
         </button>
         <button
-          onClick={() => navigate('/admin/funnel')}
+          onClick={() => router.push('/admin/funnel')}
           className="flex items-center gap-2.5 rounded-xl border border-border bg-card px-5 py-3 text-sm font-medium text-foreground hover:border-primary/30 hover:shadow-[0_4px_20px_hsl(var(--primary)/0.1)] transition-all duration-300 shadow-card group"
         >
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
@@ -152,7 +153,7 @@ export default function AdminDashboard() {
         <div className="rounded-xl border border-border bg-card p-5 shadow-card overflow-hidden">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-foreground">Pipeline Snapshot</h2>
-            <button onClick={() => navigate('/admin/funnel')} className="text-xs text-primary hover:underline font-medium">
+            <button onClick={() => router.push('/admin/funnel')} className="text-xs text-primary hover:underline font-medium">
               Full Funnel →
             </button>
           </div>
@@ -174,7 +175,7 @@ export default function AdminDashboard() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-foreground">Team Overview</h2>
           <button
-            onClick={() => navigate('/admin/team')}
+            onClick={() => router.push('/admin/team')}
             className="text-sm text-primary hover:underline font-medium"
           >
             Manage Team →

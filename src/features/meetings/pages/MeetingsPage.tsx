@@ -1,3 +1,4 @@
+'use client';
 import { useState, useMemo } from 'react';
 import { Calendar, Plus, Trash2, Edit2, Loader2, Clock, User, Link2, X, CheckCircle, XCircle } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';

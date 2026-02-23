@@ -1,4 +1,6 @@
-import { useParams, Link, useLocation } from 'react-router-dom';
+'use client';
+import { usePathname, useParams } from 'next/navigation';
+import Link from 'next/link';
 import { ArrowLeft, Phone, Play, Download, Clock, User, FileText, Calendar, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -11,13 +13,14 @@ const statusColors: Record<string, string> = {
 };
 
 export default function CallDetailPage() {
-  const { callId } = useParams();
-  const { data: call, isLoading } = useCall(callId || '');
+  const params = useParams();
+  const callId = params?.callId as string | undefined;
+  const { data: call, isLoading } = useCall(callId ?? '');
   const { data: allCalls = [] } = useCalls();
-  const location = useLocation();
-  const basePath = location.pathname.startsWith('/sdr') ? '/sdr' :
-    location.pathname.startsWith('/hr') ? '/hr' :
-      location.pathname.startsWith('/leadgen') ? '/leadgen' : '/admin';
+  const pathname = usePathname() ?? '';
+  const basePath = pathname.startsWith('/sdr') ? '/sdr' :
+    pathname.startsWith('/hr') ? '/hr' :
+      pathname.startsWith('/leadgen') ? '/leadgen' : '/admin';
 
   if (isLoading) {
     return (
@@ -31,7 +34,7 @@ export default function CallDetailPage() {
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <h2 className="text-xl font-bold text-foreground mb-2">Call not found</h2>
-        <Link to={`${basePath}/calls`}><Button variant="outline">Back to Calls</Button></Link>
+        <Link href={`${basePath}/calls`}><Button variant="outline">Back to Calls</Button></Link>
       </div>
     );
   }
@@ -41,7 +44,7 @@ export default function CallDetailPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center gap-3">
-        <Link to={`${basePath}/calls`}>
+        <Link href={`${basePath}/calls`}>
           <Button variant="ghost" size="icon" className="h-9 w-9"><ArrowLeft className="h-4 w-4" /></Button>
         </Link>
         <div>
@@ -68,7 +71,7 @@ export default function CallDetailPage() {
                 <div>
                   <p className="text-xs text-muted-foreground">{item.label}</p>
                   {item.link ? (
-                    <Link to={item.link} className="text-sm font-medium text-primary hover:underline">{item.value}</Link>
+                    <Link href={item.link} className="text-sm font-medium text-primary hover:underline">{item.value}</Link>
                   ) : (
                     <p className="text-sm font-medium text-foreground">{item.value}</p>
                   )}
@@ -126,7 +129,7 @@ export default function CallDetailPage() {
           <h3 className="text-lg font-semibold text-foreground mb-4">Other calls with {call.leadName}</h3>
           <div className="space-y-3">
             {relatedCalls.map(rc => (
-              <Link key={rc.id} to={`${basePath}/calls/${rc.id}`} className="flex items-center gap-3 p-3 rounded-lg hover:bg-secondary/50 transition-colors">
+              <Link key={rc.id} href={`${basePath}/calls/${rc.id}`} className="flex items-center gap-3 p-3 rounded-lg hover:bg-secondary/50 transition-colors">
                 <div className={`flex h-8 w-8 items-center justify-center rounded-lg ${rc.status === 'Completed' ? 'bg-success/10 text-success' : rc.status === 'Missed' ? 'bg-destructive/10 text-destructive' : 'bg-warning/10 text-warning'}`}>
                   <Phone className="h-4 w-4" />
                 </div>

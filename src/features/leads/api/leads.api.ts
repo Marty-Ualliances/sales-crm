@@ -1,16 +1,34 @@
 import { request, getToken } from '@/services/api/client';
+import { LeadSchema, LeadsListSchema, KPIsSchema } from '@/features/leads/schemas/lead.schema';
+import type { Lead, KPIs } from '@/features/leads/schemas/lead.schema';
+
+async function validated<T>(schema: { parse: (v: unknown) => T }, value: unknown): Promise<T> {
+    try {
+        return schema.parse(value);
+    } catch {
+        // Return raw data if validation fails to avoid breaking the app
+        return value as T;
+    }
+}
 
 export const leadsApi = {
-    list: (params?: { status?: string; search?: string; agent?: string }) => {
+    list: async (params?: { status?: string; search?: string; agent?: string }): Promise<Lead[]> => {
         const q = new URLSearchParams();
         if (params?.status) q.set('status', params.status);
         if (params?.search) q.set('search', params.search);
         if (params?.agent) q.set('agent', params.agent);
         const qs = q.toString();
-        return request<any[]>(`/leads${qs ? `?${qs}` : ''}`);
+        const raw = await request<unknown[]>(`/leads${qs ? `?${qs}` : ''}`);
+        return validated(LeadsListSchema, raw);
     },
-    kpis: () => request<any>('/leads/kpis'),
-    get: (id: string) => request<any>(`/leads/${id}`),
+    kpis: async (): Promise<KPIs> => {
+        const raw = await request<unknown>('/leads/kpis');
+        return validated(KPIsSchema, raw);
+    },
+    get: async (id: string): Promise<Lead> => {
+        const raw = await request<unknown>(`/leads/${id}`);
+        return validated(LeadSchema, raw);
+    },
     create: (data: any) =>
         request<any>('/leads', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) =>

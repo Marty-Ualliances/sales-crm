@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Bash(npm run seed:*)",
-      "Bash(node:*)",
-      "Bash(npm install:*)"
-    ]
-  }
-}

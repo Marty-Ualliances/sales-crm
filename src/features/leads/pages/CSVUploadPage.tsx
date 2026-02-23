@@ -1,3 +1,4 @@
+'use client';
 import { useState, useCallback } from 'react';
 import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, ArrowRight, Loader2, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';

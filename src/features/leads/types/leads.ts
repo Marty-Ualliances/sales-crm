@@ -32,6 +32,7 @@ export interface Cadence {
 
 export interface Lead {
   id: string;
+  _id?: string; // MongoDB may include _id in addition to the normalized id
   // Core
   date: string;
   source: LeadSource;
@@ -76,7 +77,7 @@ export interface Lead {
   qualityGatePass: boolean;
   qualification: Qualification;
   // Batch 3 fields
-  cadence: Cadence;
+  cadence?: Cadence;
 }
 
 export interface Activity {

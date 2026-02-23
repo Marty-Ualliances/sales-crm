@@ -1,23 +1,37 @@
+'use client';
 import { useState } from 'react';
-import { Link } from 'react-router-dom';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { Zap, Mail, ArrowLeft, AlertCircle, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { api } from '@/services/api';
+import { z } from 'zod';
+import { useForm } from 'react-hook-form';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
+
+const forgotPasswordSchema = z.object({
+    email: z.string().email('Please enter a valid email address'),
+});
+
+type ForgotPasswordValues = z.infer<typeof forgotPasswordSchema>;
 
 export default function ForgotPasswordPage() {
-    const [email, setEmail] = useState('');
     const [error, setError] = useState('');
     const [success, setSuccess] = useState(false);
     const [loading, setLoading] = useState(false);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    const form = useForm<ForgotPasswordValues>({
+        resolver: zodResolver(forgotPasswordSchema),
+        defaultValues: { email: '' },
+    });
+
+    const onSubmit = async (data: ForgotPasswordValues) => {
         setError('');
         setLoading(true);
 
         try {
-            await api.auth.forgotPassword(email);
+            await api.auth.forgotPassword(data.email);
             setSuccess(true);
         } catch (err: any) {
             setError(err.message || 'Something went wrong. Please try again.');
@@ -37,7 +51,7 @@ export default function ForgotPasswordPage() {
                 <div className="absolute bottom-1/3 left-1/4 w-48 h-48 rounded-full bg-white/[0.04] animate-float" style={{ animationDelay: '1.5s' }} />
                 <div className="relative z-10 flex flex-col justify-between p-12 text-white">
                     <div>
-                        <Link to="/" className="flex items-center gap-2.5">
+                        <Link href="/" className="flex items-center gap-2.5">
                             <img src="/team-united-logo.png" alt="Team United" className="h-10" />
                             <span className="text-2xl font-bold tracking-tight">TeamUnited</span>
                         </Link>
@@ -77,7 +91,7 @@ export default function ForgotPasswordPage() {
                         <span className="text-lg font-bold text-foreground">TeamUnited</span>
                     </div>
 
-                    <Link to="/login" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-8">
+                    <Link href="/login" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-8">
                         <ArrowLeft className="h-3.5 w-3.5" />
                         Back to login
                     </Link>
@@ -103,7 +117,7 @@ export default function ForgotPasswordPage() {
                                 </div>
                             </div>
                             <Link
-                                to="/login"
+                                href="/login"
                                 className="mt-4 inline-flex items-center gap-1.5 text-sm font-medium text-emerald-700 dark:text-emerald-400 hover:underline"
                             >
                                 <ArrowLeft className="h-3.5 w-3.5" />
@@ -111,48 +125,57 @@ export default function ForgotPasswordPage() {
                             </Link>
                         </motion.div>
                     ) : (
-                        <form onSubmit={handleSubmit} className="space-y-5">
-                            {error && (
-                                <motion.div
-                                    initial={{ opacity: 0, y: -8 }}
-                                    animate={{ opacity: 1, y: 0 }}
-                                    className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
-                                >
-                                    <AlertCircle className="h-4 w-4 shrink-0" />
-                                    {error}
-                                </motion.div>
-                            )}
-
-                            <div className="space-y-2">
-                                <label className="text-sm font-medium text-foreground">Email</label>
-                                <div className="relative">
-                                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                                    <input
-                                        type="email"
-                                        placeholder="you@company.com"
-                                        value={email}
-                                        onChange={e => setEmail(e.target.value)}
-                                        required
-                                        className="w-full h-11 rounded-lg border border-input bg-background pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
-                                    />
-                                </div>
-                            </div>
-
-                            <Button
-                                type="submit"
-                                disabled={loading}
-                                className="w-full h-11 gradient-primary border-0 text-base font-medium"
-                            >
-                                {loading ? (
-                                    <div className="flex items-center gap-2">
-                                        <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                                        Sending...
-                                    </div>
-                                ) : (
-                                    'Send Reset Link'
+                        <Form {...form}>
+                            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-5">
+                                {error && (
+                                    <motion.div
+                                        initial={{ opacity: 0, y: -8 }}
+                                        animate={{ opacity: 1, y: 0 }}
+                                        className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+                                    >
+                                        <AlertCircle className="h-4 w-4 shrink-0" />
+                                        {error}
+                                    </motion.div>
                                 )}
-                            </Button>
-                        </form>
+
+                                <FormField
+                                    control={form.control}
+                                    name="email"
+                                    render={({ field }) => (
+                                        <FormItem>
+                                            <FormLabel>Email</FormLabel>
+                                            <FormControl>
+                                                <div className="relative">
+                                                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                                                    <input
+                                                        type="email"
+                                                        placeholder="you@company.com"
+                                                        className="w-full h-11 rounded-lg border border-input bg-background pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:border-transparent transition-all"
+                                                        {...field}
+                                                    />
+                                                </div>
+                                            </FormControl>
+                                            <FormMessage />
+                                        </FormItem>
+                                    )}
+                                />
+
+                                <Button
+                                    type="submit"
+                                    disabled={loading}
+                                    className="w-full h-11 gradient-primary border-0 text-base font-medium"
+                                >
+                                    {loading ? (
+                                        <div className="flex items-center gap-2">
+                                            <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                                            Sending...
+                                        </div>
+                                    ) : (
+                                        'Send Reset Link'
+                                    )}
+                                </Button>
+                            </form>
+                        </Form>
                     )}
                 </motion.div>
             </div>

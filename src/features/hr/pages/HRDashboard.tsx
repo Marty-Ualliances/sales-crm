@@ -1,14 +1,15 @@
+'use client';
+import { useRouter } from 'next/navigation';
 import { Users, PhoneCall, CheckCircle2, XCircle, TrendingUp, Loader2, BarChart3, UserPlus } from 'lucide-react';
 import KPICard from '@/components/common/KPICard';
 import { useHRDashboard } from '@/hooks/useApi';
 import { Badge } from '@/components/ui/badge';
-import { useNavigate } from 'react-router-dom';
 import DateFilter, { DateRange, filterByDateRange } from '@/components/common/DateFilter';
 import { useState, useMemo } from 'react';
 
 export default function HRDashboard() {
   const { data, isLoading } = useHRDashboard();
-  const navigate = useNavigate();
+  const router = useRouter();
   const [dateRange, setDateRange] = useState<DateRange>('last7days');
 
   if (isLoading) {
@@ -58,7 +59,7 @@ export default function HRDashboard() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-foreground">Agent Performance</h2>
           <button
-            onClick={() => navigate('/hr/leads')}
+            onClick={() => router.push('/hr/leads')}
             className="text-sm text-primary hover:underline font-medium"
           >
             View all leads →

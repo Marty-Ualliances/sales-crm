@@ -1,3 +1,4 @@
+'use client';
 import { useLeads } from '@/hooks/useApi';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import LeadTable from '@/components/common/LeadTable';

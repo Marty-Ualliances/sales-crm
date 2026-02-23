@@ -1,4 +1,6 @@
-import { Navigate } from 'react-router-dom';
+'use client';
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { UserRole } from '@/features/auth/types/auth';
 import { ReactNode } from 'react';
@@ -10,16 +12,21 @@ interface ProtectedRouteProps {
 
 export default function ProtectedRoute({ children, allowedRoles }: ProtectedRouteProps) {
   const { isAuthenticated, user } = useAuth();
+  const router = useRouter();
 
-  if (!isAuthenticated || !user) {
-    return <Navigate to="/login" replace />;
-  }
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      router.replace('/login');
+      return;
+    }
+    if (allowedRoles && !allowedRoles.includes(user.role)) {
+      const redirectMap: Record<string, string> = { admin: '/admin', sdr: '/sdr', hr: '/hr', leadgen: '/leadgen' };
+      router.replace(redirectMap[user.role] || '/login');
+    }
+  }, [isAuthenticated, user, allowedRoles, router]);
 
-  if (allowedRoles && !allowedRoles.includes(user.role)) {
-    // Redirect to correct panel
-    const redirectMap: Record<string, string> = { admin: '/admin', sdr: '/sdr', hr: '/hr', leadgen: '/leadgen' };
-    return <Navigate to={redirectMap[user.role] || '/login'} replace />;
-  }
+  if (!isAuthenticated || !user) return null;
+  if (allowedRoles && !allowedRoles.includes(user.role)) return null;
 
   return <>{children}</>;
 }

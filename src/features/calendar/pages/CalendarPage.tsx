@@ -1,3 +1,4 @@
+'use client';
 import { useTasks, useCreateTask, useUpdateTask, useDeleteTask, useAgents, useLeads } from '@/hooks/useApi';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { Loader2, ChevronLeft, ChevronRight, Plus, X, CheckCircle2, Circle, Clock, Trash2, Edit2, ListTodo, CalendarDays, Filter } from 'lucide-react';

@@ -1,3 +1,4 @@
+'use client';
 import { useState } from 'react';
 import { Plus, Trash2, Edit2, Save, X, StickyNote, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';

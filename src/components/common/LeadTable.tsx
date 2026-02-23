@@ -1,4 +1,6 @@
-import { Link, useNavigate, useLocation } from 'react-router-dom';
+'use client';
+import { useRouter, usePathname } from 'next/navigation';
+import Link from 'next/link';
 import { Phone, Edit, CheckCircle, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
@@ -15,7 +17,7 @@ function toTelUri(phone: string): string {
 
 export default function LeadTable({ leads, compact = false }: { leads: Lead[]; compact?: boolean }) {
   const today = new Date().toISOString().split('T')[0];
-  const navigate = useNavigate();
+  const router = useRouter();
   const completeFollowUp = useCompleteFollowUp();
   const createCall = useCreateCall();
   const { user } = useAuth();
@@ -50,8 +52,8 @@ export default function LeadTable({ leads, compact = false }: { leads: Lead[]; c
     }
   };
 
-  const location = useLocation();
-  const basePath = location.pathname.startsWith('/sdr') ? '/sdr' : '/admin';
+  const pathname = usePathname() ?? '';
+  const basePath = pathname.startsWith('/sdr') ? '/sdr' : '/admin';
 
   return (
     <div className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
@@ -84,7 +86,7 @@ export default function LeadTable({ leads, compact = false }: { leads: Lead[]; c
                 >
                   <td className="px-4 py-3">
                     <div>
-                      <Link to={`${basePath}/leads/${lead.id}`} className="font-medium text-foreground hover:text-primary transition-colors">
+                      <Link href={`${basePath}/leads/${lead.id}`} className="font-medium text-foreground hover:text-primary transition-colors">
                         {lead.name}
                       </Link>
                       {lead.title && <p className="text-xs text-muted-foreground">{lead.title}</p>}
@@ -174,7 +176,7 @@ export default function LeadTable({ leads, compact = false }: { leads: Lead[]; c
                           </div>
                         )}
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:bg-secondary"
-                          title="View Details" onClick={() => navigate(`${basePath}/leads/${lead.id}`)}>
+                          title="View Details" onClick={() => router.push(`${basePath}/leads/${lead.id}`)}>
                           <Edit className="h-3.5 w-3.5" />
                         </Button>
                         <Button variant="ghost" size="icon" className="h-8 w-8 text-success hover:bg-success/10"

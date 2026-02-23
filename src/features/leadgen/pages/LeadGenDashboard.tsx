@@ -1,4 +1,5 @@
-import { Link } from 'react-router-dom';
+'use client';
+import Link from 'next/link';
 import { Users, FileSpreadsheet, UserCheck, UserX, TrendingUp, Upload } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import KPICard from '@/components/common/KPICard';
@@ -51,13 +52,13 @@ export default function LeadGenDashboard() {
         <div className="flex gap-2 items-center">
           <DateFilter value={dateRange} onChange={setDateRange} />
           <Button asChild variant="outline">
-            <Link to="/leadgen/leads">
+            <Link href="/leadgen/leads">
               <Users className="h-4 w-4 mr-2" />
               All Leads
             </Link>
           </Button>
           <Button asChild className="gradient-primary border-0">
-            <Link to="/leadgen/upload">
+            <Link href="/leadgen/upload">
               <Upload className="h-4 w-4 mr-2" />
               Upload CSV
             </Link>
@@ -119,7 +120,7 @@ export default function LeadGenDashboard() {
         <div className="rounded-xl border border-border bg-card p-6 shadow-card">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-foreground">Recent Leads</h2>
-            <Link to="/leadgen/leads" className="text-xs text-primary hover:underline">View all</Link>
+            <Link href="/leadgen/leads" className="text-xs text-primary hover:underline">View all</Link>
           </div>
           {recentLeads.length === 0 ? (
             <p className="text-sm text-muted-foreground">No leads yet. Upload a CSV to get started.</p>
@@ -151,16 +152,16 @@ export default function LeadGenDashboard() {
         <h2 className="text-base font-semibold text-foreground mb-4">Quick Actions</h2>
         <div className="flex flex-wrap gap-3">
           <Button asChild className="gradient-primary border-0">
-            <Link to="/leadgen/upload"><FileSpreadsheet className="h-4 w-4 mr-2" />Import CSV</Link>
+            <Link href="/leadgen/upload"><FileSpreadsheet className="h-4 w-4 mr-2" />Import CSV</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link to="/leadgen/leads"><Users className="h-4 w-4 mr-2" />Manage Leads</Link>
+            <Link href="/leadgen/leads"><Users className="h-4 w-4 mr-2" />Manage Leads</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link to="/leadgen/linkedin"><Users className="h-4 w-4 mr-2" />LinkedIn List</Link>
+            <Link href="/leadgen/linkedin"><Users className="h-4 w-4 mr-2" />LinkedIn List</Link>
           </Button>
           <Button asChild variant="outline">
-            <Link to="/leadgen/email"><Users className="h-4 w-4 mr-2" />Email Outreach</Link>
+            <Link href="/leadgen/email"><Users className="h-4 w-4 mr-2" />Email Outreach</Link>
           </Button>
         </div>
       </div>

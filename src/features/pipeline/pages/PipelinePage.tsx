@@ -1,3 +1,5 @@
+'use client';
+
 import { useLeads } from '@/hooks/useApi';
 import { Badge } from '@/components/ui/badge';
 import { Loader2 } from 'lucide-react';

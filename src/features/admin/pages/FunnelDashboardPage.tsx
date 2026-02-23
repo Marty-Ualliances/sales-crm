@@ -1,3 +1,4 @@
+'use client';
 import { useFunnel, useAgents, useKPIs } from '@/hooks/useApi';
 import { Loader2, TrendingUp, DollarSign, Users, Award, Target } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';

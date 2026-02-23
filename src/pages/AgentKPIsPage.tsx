@@ -1,3 +1,5 @@
+'use client';
+
 import { useAgents } from '@/hooks/useApi';
 import { BarChart3, Phone, CheckCircle, Clock, Loader2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';

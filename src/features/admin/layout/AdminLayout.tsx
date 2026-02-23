@@ -1,10 +1,11 @@
+'use client';
+import { useRouter, usePathname } from 'next/navigation';
 import { ReactNode, useState, useRef, useEffect } from 'react';
-import { Link, useLocation, useNavigate } from 'react-router-dom';
+import Link from 'next/link';
 import {
   BarChart2, Calendar, Coffee, Home,
   Layers, LogOut, Settings, StickyNote, Users, Zap, Menu, X, Clock, Phone, Shield, UserCog, CalendarCheck, Mic, ChevronDown, LogIn, Loader2
 } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
 import { useNotifications, useAgents } from '@/hooks/useApi';
 import NotificationDropdown from '@/components/common/NotificationDropdown';
 import { useAuth } from '@/features/auth/context/AuthContext';
@@ -41,10 +42,11 @@ const adminNavItems = [
 ];
 
 export default function AdminLayout({ children }: { children: ReactNode }) {
-  const location = useLocation();
-  const navigate = useNavigate();
+  const pathname = usePathname() ?? '';
+  const router = useRouter();
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [authBootstrapped, setAuthBootstrapped] = useState(false);
   const { data: notifications = [] } = useNotifications();
   const unreadCount = notifications.filter((n: any) => !n.read).length;
   useSocket();
@@ -71,9 +73,17 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
+  useEffect(() => {
+    const hasStoredToken = typeof window !== 'undefined' && !!localStorage.getItem('insurelead_token');
+    if (!user && !hasStoredToken) {
+      router.replace('/login');
+      return;
+    }
+    setAuthBootstrapped(true);
+  }, [user, router]);
+
   const handleLogout = () => {
     logout();
-    navigate('/login', { replace: true });
   };
 
   const handleImpersonate = async (userId: string) => {
@@ -86,11 +96,23 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       if (currentUser) localStorage.setItem('insurelead_admin_user', currentUser);
       localStorage.setItem('insurelead_token', result.token);
       localStorage.setItem('insurelead_user', JSON.stringify(result.user));
+      document.cookie = `insurelead_token=${result.token}; path=/; max-age=604800; samesite=lax`;
       window.location.href = ROLE_REDIRECT[result.user.role] || '/login';
     } catch {
       setImpersonating(null);
     }
   };
+
+  if (!user || !authBootstrapped) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <div className="flex items-center gap-2 text-muted-foreground">
+          <Loader2 className="h-4 w-4 animate-spin" />
+          <p className="text-sm">Loading workspace...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="flex h-screen bg-background">
@@ -99,9 +121,11 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
         {/* Subtle gradient mesh overlay */}
         <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] via-transparent to-black/[0.05] pointer-events-none" />
 
-        <div className="relative flex h-16 items-center gap-2.5 px-6 border-b border-sidebar-border">
-          <img src="/team-united-logo.png" alt="Team United" className="h-8" />
-          <span className="text-lg font-bold text-sidebar-foreground tracking-tight">TeamUnited</span>
+        <div className="relative flex h-16 items-center gap-3 px-6 border-b border-sidebar-border">
+          <div className="flex items-center justify-center rounded-lg bg-white/5 p-1.5 backdrop-blur-md border border-white/10">
+            <img src="/team-united-logo.png" alt="United Alliances" className="h-6" />
+          </div>
+          <span className="text-lg font-bold text-sidebar-foreground tracking-tight">United Alliances</span>
           <button className="ml-auto lg:hidden text-sidebar-foreground hover:text-white transition-colors" onClick={() => setSidebarOpen(false)}>
             <X className="h-5 w-5" />
           </button>
@@ -117,12 +141,12 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
 
         <nav className="relative flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
           {adminNavItems.map(item => {
-            const active = location.pathname === item.path ||
-              (item.path !== '/admin' && location.pathname.startsWith(item.path));
+            const active = pathname === item.path ||
+              (item.path !== '/admin' && pathname.startsWith(item.path));
             return (
               <Link
                 key={item.path}
-                to={item.path}
+                href={item.path}
                 onClick={() => setSidebarOpen(false)}
                 className={`relative flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 group ${active
                   ? 'bg-sidebar-accent text-sidebar-primary shadow-[inset_0_0_0_1px_hsl(var(--sidebar-primary)/0.15)]'
@@ -135,9 +159,6 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
                 )}
                 <item.icon className={`h-4 w-4 transition-transform duration-200 ${active ? 'text-sidebar-primary' : 'group-hover:scale-110'}`} />
                 {item.label}
-                {item.label === 'Follow-ups' && (
-                  <Badge variant="destructive" className="ml-auto text-xs h-5 px-1.5 animate-pulse-soft">4</Badge>
-                )}
               </Link>
             );
           })}

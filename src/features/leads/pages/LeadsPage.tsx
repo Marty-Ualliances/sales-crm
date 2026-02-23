@@ -1,3 +1,4 @@
+'use client';
 import { useLeads, useAgents } from '@/hooks/useApi';
 import LeadTable from '@/components/common/LeadTable';
 import { useState, useEffect, useRef } from 'react';

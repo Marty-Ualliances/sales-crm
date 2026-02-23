@@ -1,3 +1,4 @@
+'use client';
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { Linkedin, ExternalLink, Search, ChevronDown, ChevronUp, Loader2, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';

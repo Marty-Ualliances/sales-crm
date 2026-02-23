@@ -1,3 +1,5 @@
+'use client';
+
 import { useLeads, useAgents, useMeetings, useKPIs } from '@/hooks/useApi';
 import { Loader2, CalendarCheck, AlertTriangle, Users, TrendingUp, Clock, Phone } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';

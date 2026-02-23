@@ -1,5 +1,7 @@
+'use client';
+import { usePathname } from 'next/navigation';
 import { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import Link from 'next/link';
 import { Phone, Play, Download, Search, ChevronLeft, ChevronRight, Loader2, Edit2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '@/components/ui/dialog';
@@ -36,9 +38,8 @@ export default function CallsPage() {
   const [selectedCall, setSelectedCall] = useState<any>(null);
   const [editForm, setEditForm] = useState({ status: '', notes: '', duration: '' });
 
-  // Detect current path context using React Router (avoids /dashboard fallback redirect)
-  const location = useLocation();
-  const basePath = location.pathname.startsWith('/sdr') ? '/sdr' : '/admin';
+  const pathname = usePathname() ?? '';
+  const basePath = pathname.startsWith('/sdr') ? '/sdr' : '/admin';
 
   const filtered = calls.filter((c: any) => {
     const matchSearch = !search || c.leadName.toLowerCase().includes(search.toLowerCase()) || c.agentName.toLowerCase().includes(search.toLowerCase());
@@ -127,7 +128,7 @@ export default function CallsPage() {
                       <div>
                         {call.leadId ? (
                           <Link
-                            to={`${basePath}/leads/${call.leadId}`}
+                            href={`${basePath}/leads/${call.leadId}`}
                             className="font-medium text-foreground hover:text-primary transition-colors underline-offset-2 hover:underline"
                           >
                             {call.leadName}

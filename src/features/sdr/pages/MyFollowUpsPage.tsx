@@ -1,3 +1,4 @@
+'use client';
 import { useLeads, useCompleteFollowUp, useCreateCall } from '@/hooks/useApi';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { Badge } from '@/components/ui/badge';

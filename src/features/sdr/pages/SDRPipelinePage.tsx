@@ -1,3 +1,4 @@
+'use client';
 import { useState } from 'react';
 import { useLeads, useAgents, useCreateCall } from '@/hooks/useApi';
 import { useAuth } from '@/features/auth/context/AuthContext';
