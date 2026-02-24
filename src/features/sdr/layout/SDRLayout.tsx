@@ -3,7 +3,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { ReactNode, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  Calendar, Home, LogOut, StickyNote, Users, Zap, Menu, X, Clock, Phone, Headphones, Layers, Mail, Linkedin, CalendarCheck, Mic
+  Calendar, Home, LogOut, StickyNote, Users, Zap, Menu, X, Clock, Phone, Headphones, Layers, Mail, Linkedin, CalendarCheck, Mic, Settings
 } from 'lucide-react';
 import { useNotifications } from '@/hooks/useApi';
 import NotificationDropdown from '@/components/common/NotificationDropdown';
@@ -21,6 +21,7 @@ const sdrNavItems = [
   { icon: Mail, label: 'Email Outreach', path: '/sdr/email' },
   { icon: Linkedin, label: 'LinkedIn Outreach', path: '/sdr/linkedin' },
   { icon: StickyNote, label: 'My Notes', path: '/sdr/notes' },
+  { icon: Settings, label: 'Settings', path: '/sdr/settings' },
 ];
 
 export default function SDRLayout({ children }: { children: ReactNode }) {

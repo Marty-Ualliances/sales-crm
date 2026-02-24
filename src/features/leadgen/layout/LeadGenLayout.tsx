@@ -3,7 +3,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { ReactNode, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  Home, Users, FileSpreadsheet, LogOut, StickyNote, Zap, Menu, X, Mail, Linkedin, Target, Calendar
+  Home, Users, FileSpreadsheet, LogOut, StickyNote, Zap, Menu, X, Mail, Linkedin, Target, Calendar, Settings
 } from 'lucide-react';
 import { useNotifications } from '@/hooks/useApi';
 import NotificationDropdown from '@/components/common/NotificationDropdown';
@@ -18,6 +18,7 @@ const leadGenNavItems = [
   { icon: Linkedin, label: 'LinkedIn Outreach', path: '/leadgen/linkedin' },
   { icon: Calendar, label: 'Meetings', path: '/leadgen/meetings' },
   { icon: StickyNote, label: 'My Notes', path: '/leadgen/notes' },
+  { icon: Settings, label: 'Settings', path: '/leadgen/settings' },
 ];
 
 export default function LeadGenLayout({ children }: { children: ReactNode }) {

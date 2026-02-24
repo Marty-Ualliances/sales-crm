@@ -3,7 +3,7 @@ import { useRouter, usePathname } from 'next/navigation';
 import { ReactNode, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  ClipboardCheck, Home, LogOut, Menu, StickyNote, Users, X, Zap, FileText,
+  ClipboardCheck, Home, LogOut, Menu, StickyNote, Users, X, Zap, FileText, Settings,
 } from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { useSocket } from '@/hooks/useSocket';
@@ -13,6 +13,7 @@ const hrNavItems = [
   { icon: Users, label: 'Lead Tracker', path: '/hr/leads' },
   { icon: ClipboardCheck, label: 'Closed Leads', path: '/hr/closed-leads' },
   { icon: StickyNote, label: 'My Notes', path: '/hr/notes' },
+  { icon: Settings, label: 'Settings', path: '/hr/settings' },
 ];
 
 export default function HRLayout({ children }: { children: ReactNode }) {
