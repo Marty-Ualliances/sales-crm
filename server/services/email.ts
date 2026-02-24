@@ -1,13 +1,18 @@
 import nodemailer from 'nodemailer';
 
+const smtpPort = Number(process.env.SMTP_PORT) || 587;
+
 const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.ethereal.email',
-    port: Number(process.env.SMTP_PORT) || 587,
-    secure: false,
+    host: process.env.SMTP_HOST || 'smtp.gmail.com',
+    port: smtpPort,
+    secure: smtpPort === 465,
     auth: {
         user: process.env.SMTP_USER,
         pass: process.env.SMTP_PASS,
     },
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 15_000,
 });
 
 const FROM = process.env.SMTP_FROM || 'noreply@teamunited.com';

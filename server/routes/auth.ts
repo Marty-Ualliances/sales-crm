@@ -104,13 +104,10 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
     user.resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour
     await user.save();
 
-    // Send email
-    try {
-      await sendPasswordResetEmail(user.email, user.name, resetToken);
-    } catch (emailErr) {
+    // Send email in background — don't block the response
+    sendPasswordResetEmail(user.email, user.name, resetToken).catch((emailErr) => {
       console.error('Email send failed:', emailErr);
-      // Don't expose email errors to client
-    }
+    });
 
     res.json({ message: 'If that email exists, a reset link has been sent.' });
   } catch (err) {
