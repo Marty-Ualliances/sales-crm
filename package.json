@@ -10,6 +10,7 @@
     "seed": "tsx server/seed.ts",
     "build": "next build",
     "start": "next start",
+    "start:server": "tsx server/index.ts",
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest"
