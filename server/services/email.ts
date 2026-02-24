@@ -1,21 +1,8 @@
-import nodemailer from 'nodemailer';
+import { Resend } from 'resend';
 
-const smtpPort = Number(process.env.SMTP_PORT) || 587;
+const resend = new Resend(process.env.RESEND_API_KEY);
 
-const transporter = nodemailer.createTransport({
-    host: process.env.SMTP_HOST || 'smtp.gmail.com',
-    port: smtpPort,
-    secure: smtpPort === 465,
-    auth: {
-        user: process.env.SMTP_USER,
-        pass: process.env.SMTP_PASS,
-    },
-    connectionTimeout: 10_000,
-    greetingTimeout: 10_000,
-    socketTimeout: 15_000,
-});
-
-const FROM = process.env.SMTP_FROM || 'noreply@teamunited.com';
+const FROM = process.env.SMTP_FROM || 'onboarding@resend.dev';
 const APP_URL = process.env.APP_URL || 'http://localhost:8080';
 
 export async function sendWelcomeEmail(
@@ -44,14 +31,20 @@ export async function sendWelcomeEmail(
   `;
 
     try {
-        const info = await transporter.sendMail({
+        const { data, error } = await resend.emails.send({
             from: FROM,
-            to,
+            to: [to],
             subject: `Welcome to TeamUnited — Your Account is Ready`,
             html,
         });
-        console.log(`Welcome email sent to ${to}: ${info.messageId}`);
-        return info;
+
+        if (error) {
+            console.error(`Resend error sending welcome email to ${to}:`, error);
+            throw new Error(error.message);
+        }
+
+        console.log(`Welcome email sent to ${to}: ${data?.id}`);
+        return data;
     } catch (err) {
         console.error(`Failed to send welcome email to ${to}:`, err);
         throw err;
@@ -78,14 +71,20 @@ export async function sendPasswordResetEmail(
   `;
 
     try {
-        const info = await transporter.sendMail({
+        const { data, error } = await resend.emails.send({
             from: FROM,
-            to,
+            to: [to],
             subject: `TeamUnited — Password Reset`,
             html,
         });
-        console.log(`Reset email sent to ${to}: ${info.messageId}`);
-        return info;
+
+        if (error) {
+            console.error(`Resend error sending reset email to ${to}:`, error);
+            throw new Error(error.message);
+        }
+
+        console.log(`Reset email sent to ${to}: ${data?.id}`);
+        return data;
     } catch (err) {
         console.error(`Failed to send reset email to ${to}:`, err);
         throw err;
