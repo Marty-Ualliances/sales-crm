@@ -75,7 +75,7 @@ export default function HRLayout({ children }: { children: ReactNode }) {
         <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] via-transparent to-black/[0.05] pointer-events-none" />
 
         <div className="relative flex h-16 items-center gap-3 px-6 border-b border-sidebar-border">
-          <div className="flex items-center justify-center rounded-lg bg-white/5 p-1.5 backdrop-blur-md border border-white/10">
+          <div className="flex items-center justify-center rounded-lg bg-white/70 p-1.5 backdrop-blur-lg border border-white/30 shadow-sm">
             <img src="/team-united-logo.png" alt="United Alliances" className="h-6" />
           </div>
           <span className="text-lg font-bold text-sidebar-foreground tracking-tight">United Alliances</span>

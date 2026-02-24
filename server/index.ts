@@ -18,7 +18,7 @@ import meetingRoutes from './routes/meetings';
 import outreachRoutes from './routes/outreach';
 import { initIO } from './socket';
 
-dotenv.config();
+dotenv.config({ override: false });
 
 // ── Validate required env vars ──
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -33,18 +33,44 @@ const app = express();
 const httpServer = http.createServer(app);
 const PORT = process.env.PORT || 3001;
 const isProduction = process.env.NODE_ENV === 'production';
+console.log(`[BOOT] PORT=${PORT}, NODE_ENV=${process.env.NODE_ENV}, isProduction=${isProduction}`);
+
+// ── Trust Railway's reverse proxy ──
+app.set('trust proxy', 1);
 
 // ── Attach Socket.IO ──
 initIO(httpServer);
 
 // ── Security middleware ──
-app.use(helmet());
-app.use(cors({
-  origin: isProduction ? process.env.ALLOWED_ORIGINS?.split(',') : true,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+app.use(helmet({
+  crossOriginResourcePolicy: { policy: 'cross-origin' },
+  crossOriginOpenerPolicy: false,
+  contentSecurityPolicy: false,
 }));
+
+const allowedOriginsString = process.env.ALLOWED_ORIGINS || '';
+const parsedOrigins = allowedOriginsString
+  .split(',')
+  .map(url => url.trim().replace(/\/$/, ''))
+  .filter(url => url.length > 0);
+
+const corsOptions = {
+  origin: isProduction
+    ? (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+      if (!origin || parsedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        console.error(`CORS BLOCKED Origin: ${origin}`);
+        callback(new Error('Not allowed by CORS'));
+      }
+    }
+    : true,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
+};
+
+app.use(cors(corsOptions));
 
 // Body parsing with size limit
 app.use(express.json({ limit: '1mb' }));
@@ -124,15 +150,15 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 
 // ── Connect to MongoDB and start server ──
 mongoose
-  .connect(MONGODB_URI)
+  .connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
   .then(() => {
     console.log('Connected to MongoDB');
-    httpServer.listen(PORT, () => {
-      console.log(`Server running on port ${PORT}`);
+    httpServer.listen(Number(PORT), '0.0.0.0', () => {
+      console.log(`Server running publicly on port ${PORT}`);
     });
   })
   .catch((err) => {
-    console.error('MongoDB connection error:', err.message);
+    console.error('FATAL MongoDB connection error:', err.message);
     process.exit(1);
   });
 

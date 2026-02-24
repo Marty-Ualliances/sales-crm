@@ -61,6 +61,7 @@ export default function LeadTable({ leads, compact = false }: { leads: Lead[]; c
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-gradient-to-r from-secondary/60 to-secondary/30">
+              <th className="text-center px-3 py-3 font-medium text-muted-foreground w-12">#</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Name</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden sm:table-cell">Date Added</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden md:table-cell">Company</th>
@@ -84,6 +85,7 @@ export default function LeadTable({ leads, compact = false }: { leads: Lead[]; c
                   className={`border-b border-border/40 transition-all duration-200 animate-slide-up group hover:bg-primary/[0.03] ${isOverdue ? 'bg-destructive/5' : idx % 2 === 1 ? 'bg-secondary/20' : ''}`}
                   style={{ animationDelay: `${Math.min(idx * 30, 300)}ms` }}
                 >
+                  <td className="text-center px-3 py-3 text-muted-foreground text-xs font-medium">{idx + 1}</td>
                   <td className="px-4 py-3">
                     <div>
                       <Link href={`${basePath}/leads/${lead.id}`} className="font-medium text-foreground hover:text-primary transition-colors">
