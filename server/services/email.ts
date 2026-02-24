@@ -1,6 +1,8 @@
 import { Resend } from 'resend';
 
-const resend = new Resend(process.env.RESEND_API_KEY);
+const apiKey = process.env.RESEND_API_KEY;
+const resend = apiKey ? new Resend(apiKey) : null;
+if (!apiKey) console.warn('[EMAIL] RESEND_API_KEY not set — email sending disabled');
 
 const FROM = process.env.SMTP_FROM || 'onboarding@resend.dev';
 const APP_URL = process.env.APP_URL || 'http://localhost:8080';
@@ -31,6 +33,7 @@ export async function sendWelcomeEmail(
   `;
 
     try {
+        if (!resend) { console.warn(`[EMAIL] Skipping welcome email to ${to} — no API key`); return; }
         const { data, error } = await resend.emails.send({
             from: FROM,
             to: [to],
@@ -71,6 +74,7 @@ export async function sendPasswordResetEmail(
   `;
 
     try {
+        if (!resend) { console.warn(`[EMAIL] Skipping reset email to ${to} — no API key`); return; }
         const { data, error } = await resend.emails.send({
             from: FROM,
             to: [to],
