@@ -35,12 +35,13 @@ export async function notifyLeadStatusChange(leadId: string, leadName: string, o
   });
 }
 
-export async function notifyNewLead(leadId: string, leadName: string, assignedAgent: string) {
+export async function notifyNewLead(leadId: string, leadName: string, assignedAgent: string, userId?: string) {
   return createNotification({
     type: 'assignment',
     title: 'New Lead Assigned',
     message: `New lead ${leadName} assigned to ${assignedAgent}`,
     leadId,
+    userId,
   });
 }
 
@@ -64,10 +65,11 @@ export async function notifyFollowUpOverdue(leadId: string, leadName: string, us
   });
 }
 
-export async function notifyLeadImported(count: number) {
+export async function notifyLeadImported(count: number, userId?: string) {
   return createNotification({
     type: 'system',
     title: 'CSV Import Complete',
     message: `Successfully imported ${count} leads`,
+    userId,
   });
 }

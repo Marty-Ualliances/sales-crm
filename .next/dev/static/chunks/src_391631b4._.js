@@ -1275,10 +1275,13 @@ var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$re
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$triangle$2d$alert$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__AlertTriangle$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/triangle-alert.js [app-client] (ecmascript) <export default as AlertTriangle>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$user$2d$plus$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__UserPlus$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/user-plus.js [app-client] (ecmascript) <export default as UserPlus>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$info$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__Info$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/info.js [app-client] (ecmascript) <export default as Info>");
+var __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$check$2d$check$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__CheckCheck$3e$__ = __turbopack_context__.i("[project]/node_modules/lucide-react/dist/esm/icons/check-check.js [app-client] (ecmascript) <export default as CheckCheck>");
 var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$badge$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/components/ui/badge.tsx [app-client] (ecmascript)");
+var __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$features$2f$notifications$2f$hooks$2f$useNotifications$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__ = __turbopack_context__.i("[project]/src/features/notifications/hooks/useNotifications.ts [app-client] (ecmascript)");
 ;
 var _s = __turbopack_context__.k.signature();
 'use client';
+;
 ;
 ;
 ;
@@ -1292,6 +1295,7 @@ function NotificationDropdown({ notifications, unreadCount }) {
     _s();
     const [open, setOpen] = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useState"])(false);
     const ref = (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useRef"])(null);
+    const markAllRead = (0, __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$features$2f$notifications$2f$hooks$2f$useNotifications$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useMarkAllNotificationsRead"])();
     (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
         "NotificationDropdown.useEffect": ()=>{
             const handler = {
@@ -1305,6 +1309,16 @@ function NotificationDropdown({ notifications, unreadCount }) {
             })["NotificationDropdown.useEffect"];
         }
     }["NotificationDropdown.useEffect"], []);
+    // Auto-mark all as read when dropdown is opened
+    (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$index$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useEffect"])({
+        "NotificationDropdown.useEffect": ()=>{
+            if (open && unreadCount > 0) {
+                markAllRead.mutate();
+            }
+        }
+    }["NotificationDropdown.useEffect"], [
+        open
+    ]); // eslint-disable-line react-hooks/exhaustive-deps
     return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
         ref: ref,
         className: "relative",
@@ -1317,7 +1331,7 @@ function NotificationDropdown({ notifications, unreadCount }) {
                         className: "h-4 w-4 text-foreground"
                     }, void 0, false, {
                         fileName: "[project]/src/components/common/NotificationDropdown.tsx",
-                        lineNumber: 32,
+                        lineNumber: 41,
                         columnNumber: 9
                     }, this),
                     unreadCount > 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
@@ -1325,13 +1339,13 @@ function NotificationDropdown({ notifications, unreadCount }) {
                         children: unreadCount
                     }, void 0, false, {
                         fileName: "[project]/src/components/common/NotificationDropdown.tsx",
-                        lineNumber: 34,
+                        lineNumber: 43,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/common/NotificationDropdown.tsx",
-                lineNumber: 28,
+                lineNumber: 37,
                 columnNumber: 7
             }, this),
             open && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
@@ -1345,30 +1359,71 @@ function NotificationDropdown({ notifications, unreadCount }) {
                                 children: "Notifications"
                             }, void 0, false, {
                                 fileName: "[project]/src/components/common/NotificationDropdown.tsx",
-                                lineNumber: 42,
+                                lineNumber: 51,
                                 columnNumber: 13
                             }, this),
-                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$badge$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Badge"], {
-                                variant: "secondary",
-                                className: "text-xs",
+                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                                className: "flex items-center gap-2",
                                 children: [
-                                    unreadCount,
-                                    " new"
+                                    unreadCount > 0 && /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("button", {
+                                        onClick: ()=>markAllRead.mutate(),
+                                        className: "flex items-center gap-1 text-xs text-primary hover:text-primary/80 transition-colors",
+                                        title: "Mark all as read",
+                                        children: [
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$lucide$2d$react$2f$dist$2f$esm$2f$icons$2f$check$2d$check$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__$3c$export__default__as__CheckCheck$3e$__["CheckCheck"], {
+                                                className: "h-3.5 w-3.5"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/common/NotificationDropdown.tsx",
+                                                lineNumber: 59,
+                                                columnNumber: 19
+                                            }, this),
+                                            /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("span", {
+                                                children: "Mark all read"
+                                            }, void 0, false, {
+                                                fileName: "[project]/src/components/common/NotificationDropdown.tsx",
+                                                lineNumber: 60,
+                                                columnNumber: 19
+                                            }, this)
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/src/components/common/NotificationDropdown.tsx",
+                                        lineNumber: 54,
+                                        columnNumber: 17
+                                    }, this),
+                                    /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])(__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$components$2f$ui$2f$badge$2e$tsx__$5b$app$2d$client$5d$__$28$ecmascript$29$__["Badge"], {
+                                        variant: "secondary",
+                                        className: "text-xs",
+                                        children: [
+                                            unreadCount,
+                                            " new"
+                                        ]
+                                    }, void 0, true, {
+                                        fileName: "[project]/src/components/common/NotificationDropdown.tsx",
+                                        lineNumber: 63,
+                                        columnNumber: 15
+                                    }, this)
                                 ]
                             }, void 0, true, {
                                 fileName: "[project]/src/components/common/NotificationDropdown.tsx",
-                                lineNumber: 43,
+                                lineNumber: 52,
                                 columnNumber: 13
                             }, this)
                         ]
                     }, void 0, true, {
                         fileName: "[project]/src/components/common/NotificationDropdown.tsx",
-                        lineNumber: 41,
+                        lineNumber: 50,
                         columnNumber: 11
                     }, this),
                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                         className: "max-h-80 overflow-y-auto",
-                        children: notifications.map((n)=>{
+                        children: notifications.length === 0 ? /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
+                            className: "px-4 py-8 text-center text-sm text-gray-400 dark:text-zinc-500",
+                            children: "No notifications yet"
+                        }, void 0, false, {
+                            fileName: "[project]/src/components/common/NotificationDropdown.tsx",
+                            lineNumber: 68,
+                            columnNumber: 15
+                        }, this) : notifications.map((n)=>{
                             const Icon = typeIcons[n.type];
                             return /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                 className: `flex items-start gap-3 px-4 py-3 border-b border-gray-100 dark:border-zinc-800 last:border-0 transition-colors hover:bg-gray-50 dark:hover:bg-zinc-800 ${!n.read ? 'bg-orange-50/50 dark:bg-primary/[0.05]' : ''}`,
@@ -1379,13 +1434,13 @@ function NotificationDropdown({ notifications, unreadCount }) {
                                             className: "h-3.5 w-3.5"
                                         }, void 0, false, {
                                             fileName: "[project]/src/components/common/NotificationDropdown.tsx",
-                                            lineNumber: 51,
-                                            columnNumber: 21
+                                            lineNumber: 77,
+                                            columnNumber: 23
                                         }, this)
                                     }, void 0, false, {
                                         fileName: "[project]/src/components/common/NotificationDropdown.tsx",
-                                        lineNumber: 50,
-                                        columnNumber: 19
+                                        lineNumber: 76,
+                                        columnNumber: 21
                                     }, this),
                                     /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
                                         className: "min-w-0",
@@ -1395,57 +1450,61 @@ function NotificationDropdown({ notifications, unreadCount }) {
                                                 children: n.title
                                             }, void 0, false, {
                                                 fileName: "[project]/src/components/common/NotificationDropdown.tsx",
-                                                lineNumber: 54,
-                                                columnNumber: 21
+                                                lineNumber: 80,
+                                                columnNumber: 23
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                                 className: "text-xs text-gray-500 dark:text-zinc-400 mt-0.5 line-clamp-2",
                                                 children: n.message
                                             }, void 0, false, {
                                                 fileName: "[project]/src/components/common/NotificationDropdown.tsx",
-                                                lineNumber: 55,
-                                                columnNumber: 21
+                                                lineNumber: 81,
+                                                columnNumber: 23
                                             }, this),
                                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("p", {
                                                 className: "text-xs text-gray-400 dark:text-zinc-500 mt-1",
                                                 children: n.timestamp
                                             }, void 0, false, {
                                                 fileName: "[project]/src/components/common/NotificationDropdown.tsx",
-                                                lineNumber: 56,
-                                                columnNumber: 21
+                                                lineNumber: 82,
+                                                columnNumber: 23
                                             }, this)
                                         ]
                                     }, void 0, true, {
                                         fileName: "[project]/src/components/common/NotificationDropdown.tsx",
-                                        lineNumber: 53,
-                                        columnNumber: 19
+                                        lineNumber: 79,
+                                        columnNumber: 21
                                     }, this)
                                 ]
                             }, n.id, true, {
                                 fileName: "[project]/src/components/common/NotificationDropdown.tsx",
-                                lineNumber: 49,
-                                columnNumber: 17
+                                lineNumber: 75,
+                                columnNumber: 19
                             }, this);
                         })
                     }, void 0, false, {
                         fileName: "[project]/src/components/common/NotificationDropdown.tsx",
-                        lineNumber: 45,
+                        lineNumber: 66,
                         columnNumber: 11
                     }, this)
                 ]
             }, void 0, true, {
                 fileName: "[project]/src/components/common/NotificationDropdown.tsx",
-                lineNumber: 40,
+                lineNumber: 49,
                 columnNumber: 9
             }, this)
         ]
     }, void 0, true, {
         fileName: "[project]/src/components/common/NotificationDropdown.tsx",
-        lineNumber: 27,
+        lineNumber: 36,
         columnNumber: 5
     }, this);
 }
-_s(NotificationDropdown, "wl9VvfhnMVWQ+kCekFjcRPEi3/0=");
+_s(NotificationDropdown, "O0Spy1KgnJbWaA+OXNMziJq8bn4=", false, function() {
+    return [
+        __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$features$2f$notifications$2f$hooks$2f$useNotifications$2e$ts__$5b$app$2d$client$5d$__$28$ecmascript$29$__["useMarkAllNotificationsRead"]
+    ];
+});
 _c = NotificationDropdown;
 var _c;
 __turbopack_context__.k.register(_c, "NotificationDropdown");
@@ -1793,7 +1852,7 @@ function AdminLayout({ children }) {
                         className: "relative flex h-16 items-center gap-3 px-6 border-b border-sidebar-border",
                         children: [
                             /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("div", {
-                                className: "flex items-center justify-center rounded-lg bg-white/5 p-1.5 backdrop-blur-md border border-white/10",
+                                className: "flex items-center justify-center rounded-lg bg-white/70 p-1.5 backdrop-blur-lg border border-white/30 shadow-sm",
                                 children: /*#__PURE__*/ (0, __TURBOPACK__imported__module__$5b$project$5d2f$node_modules$2f$next$2f$dist$2f$compiled$2f$react$2f$jsx$2d$dev$2d$runtime$2e$js__$5b$app$2d$client$5d$__$28$ecmascript$29$__["jsxDEV"])("img", {
                                     src: "/team-united-logo.png",
                                     alt: "United Alliances",

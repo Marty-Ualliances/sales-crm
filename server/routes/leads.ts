@@ -270,6 +270,7 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
 
     const imported: any[] = [];
     const errors: { row: number; error: string }[] = [];
+    const docsToInsert: any[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       try {
@@ -328,18 +329,41 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
         doc.activities = [{ type: 'note', description: 'Lead imported via CSV', timestamp: new Date(), agent: defaultAgent }];
         doc.stageHistory = [{ stage: doc.status, enteredAt: new Date(), agent: defaultAgent }];
 
-        const lead = new Lead(doc);
-        await lead.save();
-        imported.push(lead);
+        docsToInsert.push(doc);
       } catch (e: any) {
-        console.error(`[Import] Row ${i + 2} error:`, e.message);
+        console.error(`[Import] Row ${i + 2} parse error:`, e.message);
         errors.push({ row: i + 2, error: e.message });
       }
     }
 
-    // Create notification for successful import
+    // Bulk insert with ordered:false — skips individual failures, inserts the rest
+    if (docsToInsert.length > 0) {
+      try {
+        const result = await Lead.insertMany(docsToInsert, { ordered: false });
+        imported.push(...result);
+      } catch (bulkError: any) {
+        // insertMany with ordered:false throws but still inserts valid docs
+        if (bulkError.insertedDocs) {
+          imported.push(...bulkError.insertedDocs);
+        } else if (bulkError.result?.nInserted) {
+          // Fallback: count inserted from bulkWrite result
+          const insertedCount = bulkError.result.nInserted;
+          // We'll report the count even without individual docs
+          for (let k = 0; k < insertedCount; k++) imported.push({});
+        }
+        // Log individual write errors
+        if (bulkError.writeErrors) {
+          for (const we of bulkError.writeErrors) {
+            errors.push({ row: we.index + 2, error: we.errmsg || 'Insert failed' });
+          }
+        }
+        console.error(`[Import] Bulk insert partial: ${imported.length} ok, ${bulkError.writeErrors?.length || 0} failed`);
+      }
+    }
+
+    // Create notification for successful import (scoped to this user)
     if (imported.length > 0) {
-      await notifyLeadImported(imported.length);
+      await notifyLeadImported(imported.length, req.user!.id);
       emitLeadChange('imported', { count: imported.length });
     }
 
@@ -386,9 +410,9 @@ router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
     const lead = await Lead.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!lead) return res.status(404).json({ error: 'Lead not found' });
 
-    // Create notification for status change
+    // Create notification for status change (scoped to this user)
     if (oldLead && req.body.status && oldLead.status !== req.body.status) {
-      await notifyLeadStatusChange(lead._id.toString(), lead.name, oldLead.status, req.body.status);
+      await notifyLeadStatusChange(lead._id.toString(), lead.name, oldLead.status, req.body.status, req.user!.id);
     }
     emitLeadChange('updated', { leadId: lead._id });
     res.json(lead);
@@ -455,8 +479,8 @@ router.post('/:id/schedule-followup', auth, async (req: AuthRequest, res: Respon
 
     await lead.save();
 
-    // Create notification for follow-up scheduled
-    await notifyFollowUpDue(lead._id.toString(), lead.name, new Date(date));
+    // Create notification for follow-up scheduled (scoped to this user)
+    await notifyFollowUpDue(lead._id.toString(), lead.name, new Date(date), req.user!.id);
 
     res.json(lead);
   } catch (err) {

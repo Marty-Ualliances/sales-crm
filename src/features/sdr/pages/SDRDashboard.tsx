@@ -117,28 +117,36 @@ export default function SDRDashboard() {
       </div>
 
       {/* Personal stats */}
-      {agent && (
-        <div className="rounded-xl border border-border bg-card p-5 shadow-card animate-slide-in-right glow-card">
-          <h2 className="text-lg font-semibold text-foreground mb-4">My Performance</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 auto-rows-fr">
-            <div className="text-center p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-all duration-300 hover:scale-105 cursor-default flex flex-col items-center justify-center">
-              <Phone className="h-5 w-5 mb-2 text-primary animate-float" />
-              <p className="text-2xl font-bold text-foreground">{agent.callsMade}</p>
-              <p className="text-xs text-muted-foreground">Calls Made</p>
-            </div>
-            <div className="text-center p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-all duration-300 hover:scale-105 cursor-default flex flex-col items-center justify-center">
-              <CheckCircle className="h-5 w-5 mb-2 text-success animate-float" />
-              <p className="text-2xl font-bold text-foreground">{agent.followUpsCompleted}</p>
-              <p className="text-xs text-muted-foreground">Follow-ups Done</p>
-            </div>
-            <div className="text-center p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-all duration-300 hover:scale-105 cursor-default flex flex-col items-center justify-center">
-              <Clock className="h-5 w-5 mb-2 text-warning animate-float" />
-              <p className="text-2xl font-bold text-foreground">{agent.followUpsPending}</p>
-              <p className="text-xs text-muted-foreground">Pending</p>
-            </div>
+      <div className="rounded-xl border border-border bg-card p-5 shadow-card animate-slide-in-right glow-card">
+        <h2 className="text-lg font-semibold text-foreground mb-4">My Performance</h2>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 auto-rows-fr">
+          <div className="text-center p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-all duration-300 hover:scale-105 cursor-default flex flex-col items-center justify-center">
+            <Users className="h-5 w-5 mb-2 text-primary animate-float" />
+            <p className="text-2xl font-bold text-foreground">{leads.length}</p>
+            <p className="text-xs text-muted-foreground">Total Leads</p>
+          </div>
+          <div className="text-center p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-all duration-300 hover:scale-105 cursor-default flex flex-col items-center justify-center">
+            <Phone className="h-5 w-5 mb-2 text-primary animate-float" />
+            <p className="text-2xl font-bold text-foreground">{agent?.callsMade ?? calls.length}</p>
+            <p className="text-xs text-muted-foreground">Calls Made</p>
+          </div>
+          <div className="text-center p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-all duration-300 hover:scale-105 cursor-default flex flex-col items-center justify-center">
+            <Clock className="h-5 w-5 mb-2 text-warning animate-float" />
+            <p className="text-2xl font-bold text-foreground">{pendingFollowUps}</p>
+            <p className="text-xs text-muted-foreground">Follow-ups Pending</p>
+          </div>
+          <div className="text-center p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-all duration-300 hover:scale-105 cursor-default flex flex-col items-center justify-center">
+            <AlertTriangle className="h-5 w-5 mb-2 text-destructive animate-float" />
+            <p className="text-2xl font-bold text-foreground">{overdueFollowUps}</p>
+            <p className="text-xs text-muted-foreground">Overdue</p>
+          </div>
+          <div className="text-center p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-all duration-300 hover:scale-105 cursor-default flex flex-col items-center justify-center">
+            <CheckCircle className="h-5 w-5 mb-2 text-success animate-float" />
+            <p className="text-2xl font-bold text-foreground">{leads.filter((l: any) => l.status === 'Closed Won').length}</p>
+            <p className="text-xs text-muted-foreground">Closed Won</p>
           </div>
         </div>
-      )}
+      </div>
 
 
       {/* Cadence Tasks */}

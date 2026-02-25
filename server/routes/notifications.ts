@@ -8,10 +8,14 @@ const router = Router();
 router.get('/', auth, async (req: AuthRequest, res: Response) => {
   try {
     const filter: any = {};
-    // Optionally filter by userId
-    if (req.user!.role === 'sdr') {
-      filter.$or = [{ userId: req.user!.id }, { userId: { $exists: false } }];
+    const userRole = req.user!.role;
+
+    // SDR and leadgen users only see their own notifications
+    if (userRole === 'sdr' || userRole === 'leadgen') {
+      filter.userId = req.user!.id;
     }
+    // admin and hr see all notifications
+
     const notifications = await Notification.find(filter).sort({ timestamp: -1 }).limit(50);
     res.json(notifications);
   } catch (err) {
@@ -33,7 +37,15 @@ router.put('/:id/read', auth, async (req: AuthRequest, res: Response) => {
 // PUT /api/notifications/read-all
 router.put('/read-all', auth, async (req: AuthRequest, res: Response) => {
   try {
-    await Notification.updateMany({ read: false }, { read: true });
+    const filter: any = { read: false };
+    const userRole = req.user!.role;
+
+    // Non-admin users only mark their own as read
+    if (userRole === 'sdr' || userRole === 'leadgen') {
+      filter.userId = req.user!.id;
+    }
+
+    await Notification.updateMany(filter, { read: true });
     res.json({ message: 'All notifications marked as read' });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });

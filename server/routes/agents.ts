@@ -54,10 +54,39 @@ router.get('/', auth, async (req: AuthRequest, res: Response) => {
 
       res.json(agents);
     } else {
-      // SDR & leadgen see basic roster only (name, role, avatar, email)
-      const agents = await User.find()
-        .select('name email avatar role createdAt')
-        .sort({ name: 1 });
+      // SDR & leadgen: return basic roster + compute stats for the current user
+      const users = await User.find().sort({ name: 1 });
+      const agents = await Promise.all(users.map(async (user) => {
+        const u = user.toJSON();
+        const userId = user._id.toString();
+
+        // Compute stats for the current requesting user
+        if (userId === req.user!.id) {
+          const callsMade = await Call.countDocuments({ agentName: u.name });
+          const leadsAssigned = await Lead.countDocuments({ assignedAgent: u.name });
+          const leadsWon = await Lead.countDocuments({ closedBy: u.name, status: 'Closed Won' });
+          const pendingLeads = await Lead.find({
+            assignedAgent: u.name,
+            nextFollowUp: { $ne: null },
+            status: { $nin: ['Closed Won', 'Closed Lost'] }
+          });
+          const followUpsPending = pendingLeads.length;
+          const followUpsCompleted = await Call.countDocuments({ agentName: u.name, status: 'Completed' });
+          const conversionRate = leadsAssigned > 0 ? Math.round((leadsWon / leadsAssigned) * 100) : 0;
+
+          return {
+            ...u,
+            callsMade,
+            leadsAssigned,
+            followUpsPending,
+            followUpsCompleted,
+            conversionRate,
+          };
+        }
+
+        // Other users: basic info only
+        return { id: userId, name: u.name, email: u.email, avatar: u.avatar, role: u.role };
+      }));
       res.json(agents);
     }
   } catch (err) {
