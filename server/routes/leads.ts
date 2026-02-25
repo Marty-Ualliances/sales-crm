@@ -270,94 +270,124 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
 
     const imported: any[] = [];
     const errors: { row: number; error: string }[] = [];
-    const docsToInsert: any[] = [];
 
     for (let i = 0; i < rows.length; i++) {
       try {
         const row = rows[i];
+
+        // Build document with safe defaults for ALL enum fields
         const doc: any = {
-          source: 'CSV Import',
           date: new Date(),
-          assignedAgent: defaultAgent,
+          source: 'CSV Import',
           status: 'New Lead',
+          assignedAgent: defaultAgent,
+          addedBy: defaultAgent,
+          // Explicitly set ALL enum fields to prevent validation errors
+          priority: 'C',
+          segment: '',
+          sourceChannel: '',
+          qualityGatePass: false,
         };
 
-        // Map known columns
+        // Map known columns from the spreadsheet
         for (const [header, value] of Object.entries(row)) {
           const field = headerMap[header];
           if (!field || !value) continue;
 
+          const v = String(value).trim();
+          if (!v) continue;
+
           if (field === 'employees') {
-            const num = parseInt(String(value).replace(/[^0-9]/g, ''), 10);
-            doc[field] = isNaN(num) ? null : num;
+            const num = parseInt(v.replace(/[^0-9]/g, ''), 10);
+            if (!isNaN(num)) doc[field] = num;
           } else if (field === 'nextFollowUp' || field === 'date') {
-            const d = new Date(value);
+            const d = new Date(v);
             if (!isNaN(d.getTime())) doc[field] = d;
           } else {
-            doc[field] = value;
+            doc[field] = v;
           }
         }
 
-        // Collect data from unknown columns and append to notes
+        // Collect data from unknown columns → notes
         const extraFields: string[] = [];
         for (const header of unmappedHeaders) {
           const val = row[header];
-          if (val) extraFields.push(`${header}: ${val}`);
+          if (val && String(val).trim()) extraFields.push(`${header}: ${String(val).trim()}`);
         }
         if (extraFields.length > 0) {
           doc.notes = (doc.notes || '') + (doc.notes ? '\n' : '') + extraFields.join(' | ');
         }
 
-        // If name is missing, use first available identifier
-        if (!doc.name) {
-          doc.name = doc.email || doc.companyName || `Unknown Lead (Row ${i + 2})`;
+        // ── SANITIZE ALL ENUM FIELDS ──
+        // Name: REQUIRED — must be non-empty
+        if (!doc.name || !String(doc.name).trim()) {
+          doc.name = doc.email || doc.companyName || doc.title || `Lead Row ${i + 2}`;
         }
+        doc.name = String(doc.name).trim().substring(0, 200);
 
-        // Validate source enum — fallback to 'CSV Import'
-        if (doc.source && !VALID_SOURCES.includes(doc.source)) {
-          doc.notes = (doc.notes || '') + `\nOriginal source: ${doc.source}`;
+        // Source: must be a valid enum value
+        if (!VALID_SOURCES.includes(doc.source)) {
+          if (doc.source) doc.notes = (doc.notes || '') + `\nOriginal source: ${doc.source}`;
           doc.source = 'CSV Import';
         }
 
-        // Validate status enum — fallback to 'New Lead'
-        if (doc.status && !VALID_STATUSES.includes(doc.status)) {
-          doc.notes = (doc.notes || '') + `\nOriginal status: ${doc.status}`;
+        // Status: must be a valid enum value
+        if (!VALID_STATUSES.includes(doc.status)) {
+          if (doc.status) doc.notes = (doc.notes || '') + `\nOriginal status: ${doc.status}`;
           doc.status = 'New Lead';
         }
 
-        doc.addedBy = defaultAgent;
+        // Priority: must be A, B, or C
+        if (!['A', 'B', 'C'].includes(doc.priority)) {
+          doc.priority = 'C';
+        }
+
+        // Segment: must be valid enum or empty
+        const VALID_SEGMENTS = ['Insurance', 'Accounting', 'Finance', 'Healthcare', 'Legal', 'Other', ''];
+        if (!VALID_SEGMENTS.includes(doc.segment || '')) {
+          doc.segment = '';
+        }
+
+        // Activities and stageHistory
         doc.activities = [{ type: 'note', description: 'Lead imported via CSV', timestamp: new Date(), agent: defaultAgent }];
         doc.stageHistory = [{ stage: doc.status, enteredAt: new Date(), agent: defaultAgent }];
 
-        docsToInsert.push(doc);
+        // Save with try/catch — if it STILL fails, retry with minimal doc
+        try {
+          const lead = new Lead(doc);
+          await lead.save();
+          imported.push(lead);
+        } catch (saveErr: any) {
+          console.error(`[Import] Row ${i + 2} save failed: ${saveErr.message} — retrying with minimal doc`);
+          // Retry with absolute minimum fields
+          try {
+            const minimalDoc = {
+              name: doc.name || `Lead Row ${i + 2}`,
+              assignedAgent: defaultAgent,
+              addedBy: defaultAgent,
+              source: 'CSV Import',
+              status: 'New Lead',
+              date: new Date(),
+              priority: 'C',
+              segment: '',
+              email: doc.email || '',
+              companyName: doc.companyName || '',
+              title: doc.title || '',
+              notes: `Import retry — original save failed: ${saveErr.message}\n${doc.notes || ''}`,
+              activities: [{ type: 'note', description: 'Lead imported via CSV (retry)', timestamp: new Date(), agent: defaultAgent }],
+              stageHistory: [{ stage: 'New Lead', enteredAt: new Date(), agent: defaultAgent }],
+            };
+            const retryLead = new Lead(minimalDoc);
+            await retryLead.save();
+            imported.push(retryLead);
+          } catch (retryErr: any) {
+            console.error(`[Import] Row ${i + 2} retry also failed: ${retryErr.message}`);
+            errors.push({ row: i + 2, error: saveErr.message });
+          }
+        }
       } catch (e: any) {
         console.error(`[Import] Row ${i + 2} parse error:`, e.message);
         errors.push({ row: i + 2, error: e.message });
-      }
-    }
-
-    // Bulk insert with ordered:false — skips individual failures, inserts the rest
-    if (docsToInsert.length > 0) {
-      try {
-        const result = await Lead.insertMany(docsToInsert, { ordered: false });
-        imported.push(...result);
-      } catch (bulkError: any) {
-        // insertMany with ordered:false throws but still inserts valid docs
-        if (bulkError.insertedDocs) {
-          imported.push(...bulkError.insertedDocs);
-        } else if (bulkError.result?.nInserted) {
-          // Fallback: count inserted from bulkWrite result
-          const insertedCount = bulkError.result.nInserted;
-          // We'll report the count even without individual docs
-          for (let k = 0; k < insertedCount; k++) imported.push({});
-        }
-        // Log individual write errors
-        if (bulkError.writeErrors) {
-          for (const we of bulkError.writeErrors) {
-            errors.push({ row: we.index + 2, error: we.errmsg || 'Insert failed' });
-          }
-        }
-        console.error(`[Import] Bulk insert partial: ${imported.length} ok, ${bulkError.writeErrors?.length || 0} failed`);
       }
     }
 
@@ -367,13 +397,13 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
       emitLeadChange('imported', { count: imported.length });
     }
 
-    console.log(`[Import] Done: ${imported.length} imported, ${errors.length} errors`);
+    console.log(`[Import] Done: ${imported.length} imported, ${errors.length} errors out of ${rows.length} rows`);
 
     res.json({
       imported: imported.length,
       errors: errors.length,
       skipped: 0,
-      errorDetails: errors.slice(0, 20),
+      errorDetails: errors.slice(0, 50),
       total: rows.length,
     });
   } catch (err: any) {
