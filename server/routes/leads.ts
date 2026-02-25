@@ -226,7 +226,11 @@ router.post('/', auth, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST /api/leads/import — CSV bulk import
+// Allowed enum values for validation
+const VALID_SOURCES = ['CSV Import', 'Manual', 'Website', 'Referral', 'LinkedIn', 'Cold – High Fit', 'Warm – Engaged', 'Cold – Quick Sourced', 'Cold – Bulk Data', 'Other'];
+const VALID_STATUSES = ['New Lead', 'Working', 'Connected', 'Qualified', 'Meeting Booked', 'Meeting Completed', 'Proposal Sent', 'Negotiation', 'Closed Won', 'Closed Lost', 'Nurture'];
+
+// POST /api/leads/import — CSV bulk import (flexible)
 router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
@@ -235,11 +239,14 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
     const lines = text.split(/\r?\n/).filter(l => l.trim());
     if (lines.length < 2) return res.status(400).json({ error: 'CSV must have a header row and at least one data row' });
 
-    const rawHeaders = parseCSVLine(lines[0]);
+    const rawHeaders = parseCSVLine(lines[0]).map(h => h.replace(/^"|"$/g, '').trim());
     const headerMap = rawHeaders.map(h => {
       const key = h.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
       return CSV_FIELD_MAP[key] || null;
     });
+
+    // Track which headers are unknown (not mapped) — we'll store their data in notes
+    const unmappedHeaders = rawHeaders.map((h, idx) => headerMap[idx] === null ? h : null);
 
     // Get current user for default agent assignment
     const User = (await import('../models/User')).default;
@@ -248,10 +255,16 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
 
     const imported: any[] = [];
     const errors: { row: number; error: string }[] = [];
+    const skipped: number[] = [];
 
     for (let i = 1; i < lines.length; i++) {
       try {
         const vals = parseCSVLine(lines[i]);
+
+        // Skip completely empty rows
+        const hasData = vals.some(v => v.replace(/^"|"$/g, '').trim().length > 0);
+        if (!hasData) { skipped.push(i + 1); continue; }
+
         const doc: any = {
           source: 'CSV Import',
           date: new Date(),
@@ -259,9 +272,11 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
           status: 'New Lead',
         };
 
+        // Map known columns
         headerMap.forEach((field, idx) => {
           if (!field || !vals[idx]) return;
-          const v = vals[idx].replace(/^"|"$/g, '');
+          const v = vals[idx].replace(/^"|"$/g, '').trim();
+          if (!v) return;
           if (field === 'employees') {
             doc[field] = parseInt(v, 10) || null;
           } else if (field === 'nextFollowUp' || field === 'date') {
@@ -272,10 +287,43 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
           }
         });
 
-        if (!doc.name) { errors.push({ row: i + 1, error: 'Missing name' }); continue; }
+        // Collect data from unknown/unmapped columns and append to notes
+        const extraFields: string[] = [];
+        unmappedHeaders.forEach((header, idx) => {
+          if (!header || !vals[idx]) return;
+          const v = vals[idx].replace(/^"|"$/g, '').trim();
+          if (v) extraFields.push(`${header}: ${v}`);
+        });
+        if (extraFields.length > 0) {
+          const existingNotes = doc.notes || '';
+          doc.notes = existingNotes
+            ? `${existingNotes}\n--- Extra CSV Fields ---\n${extraFields.join('\n')}`
+            : `--- Extra CSV Fields ---\n${extraFields.join('\n')}`;
+        }
+
+        // If name is missing, use first available identifier or 'Unknown'
+        if (!doc.name) {
+          doc.name = doc.email || doc.companyName || `Unknown Lead (Row ${i + 1})`;
+        }
+
+        // If source from CSV is not a valid enum, keep default 'CSV Import'
+        if (doc.source && !VALID_SOURCES.includes(doc.source)) {
+          const originalSource = doc.source;
+          doc.source = 'CSV Import';
+          doc.notes = (doc.notes || '') + `\nOriginal source: ${originalSource}`;
+        }
+
+        // If status from CSV is not a valid enum, keep default 'New Lead'
+        if (doc.status && !VALID_STATUSES.includes(doc.status)) {
+          const originalStatus = doc.status;
+          doc.status = 'New Lead';
+          doc.notes = (doc.notes || '') + `\nOriginal status: ${originalStatus}`;
+        }
 
         doc.addedBy = defaultAgent;
         doc.activities = [{ type: 'note', description: 'Lead imported via CSV', timestamp: new Date(), agent: defaultAgent }];
+        doc.stageHistory = [{ stage: doc.status, enteredAt: new Date(), agent: defaultAgent }];
+
         const lead = new Lead(doc);
         await lead.save();
         imported.push(lead);
@@ -293,6 +341,7 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
     res.json({
       imported: imported.length,
       errors: errors.length,
+      skipped: skipped.length,
       errorDetails: errors.slice(0, 20),
       total: lines.length - 1,
     });

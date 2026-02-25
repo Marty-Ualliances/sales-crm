@@ -23,7 +23,7 @@ export default function CSVUploadPage() {
   const [rows, setRows] = useState<CSVRow[]>([]);
   const [dragOver, setDragOver] = useState(false);
   const [file, setFile] = useState<File | null>(null);
-  const [result, setResult] = useState<{ imported: number; errors: number; errorDetails: { row: number; error: string }[] } | null>(null);
+  const [result, setResult] = useState<{ imported: number; errors: number; skipped: number; errorDetails: { row: number; error: string }[] } | null>(null);
 
   const importMutation = useImportCSV();
 
@@ -87,7 +87,7 @@ export default function CSVUploadPage() {
       setResult(res);
       setStep('done');
     } catch (err: any) {
-      setResult({ imported: 0, errors: 1, errorDetails: [{ row: 0, error: err.message }] });
+      setResult({ imported: 0, errors: 1, skipped: 0, errorDetails: [{ row: 0, error: err.message }] });
       setStep('done');
     }
   };
