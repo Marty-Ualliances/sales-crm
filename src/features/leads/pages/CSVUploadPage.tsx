@@ -27,7 +27,7 @@ export default function CSVUploadPage() {
 
   const importMutation = useImportCSV();
 
-  const parseCSVLine = (line: string): string[] => {
+  const parseCSVLine = (line: string, delimiter: string = ','): string[] => {
     const result: string[] = [];
     let current = '';
     let inQuotes = false;
@@ -40,7 +40,7 @@ export default function CSVUploadPage() {
         } else {
           inQuotes = !inQuotes;
         }
-      } else if (ch === ',' && !inQuotes) {
+      } else if (ch === delimiter && !inQuotes) {
         result.push(current.trim());
         current = '';
       } else {
@@ -53,10 +53,14 @@ export default function CSVUploadPage() {
 
   const parseCSV = (text: string) => {
     const lines = text.trim().split(/\r?\n/);
-    const h = parseCSVLine(lines[0]).map(s => s.replace(/^"|"$/g, ''));
+    // Auto-detect tab vs comma
+    const tabCount = (lines[0].match(/\t/g) || []).length;
+    const commaCount = (lines[0].match(/,/g) || []).length;
+    const delimiter = tabCount > commaCount ? '\t' : ',';
+    const h = parseCSVLine(lines[0], delimiter).map(s => s.replace(/^"|"$/g, ''));
     setHeaders(h);
     const data = lines.slice(1).filter(l => l.trim()).map(line => {
-      const vals = parseCSVLine(line).map(s => s.replace(/^"|"$/g, ''));
+      const vals = parseCSVLine(line, delimiter).map(s => s.replace(/^"|"$/g, ''));
       const row: CSVRow = {};
       h.forEach((header, i) => (row[header] = vals[i] || ''));
       return row;
@@ -76,7 +80,7 @@ export default function CSVUploadPage() {
     e.preventDefault();
     setDragOver(false);
     const f = e.dataTransfer.files[0];
-    if (f?.name.endsWith('.csv')) handleFile(f);
+    if (f?.name.endsWith('.csv') || f?.name.endsWith('.tsv') || f?.name.endsWith('.txt')) handleFile(f);
   }, []);
 
   const handleImport = async () => {
@@ -143,7 +147,7 @@ export default function CSVUploadPage() {
             <Upload className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
             <p className="text-lg font-medium text-foreground mb-2">Drop your CSV file here</p>
             <p className="text-sm text-muted-foreground mb-4">or click to browse</p>
-            <input type="file" accept=".csv" className="hidden" id="csv-input" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+            <input type="file" accept=".csv,.tsv,.txt" className="hidden" id="csv-input" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
             <Button onClick={() => document.getElementById('csv-input')?.click()}>
               <FileSpreadsheet className="h-4 w-4 mr-2" />
               Select CSV File

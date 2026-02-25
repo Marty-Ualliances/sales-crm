@@ -55,7 +55,14 @@ const CSV_FIELD_MAP: Record<string, string> = {
   'follow up date': 'nextFollowUp',
 };
 
-function parseCSVLine(line: string): string[] {
+// Auto-detect whether the file uses tabs or commas as delimiter
+function detectDelimiter(headerLine: string): string {
+  const tabCount = (headerLine.match(/\t/g) || []).length;
+  const commaCount = (headerLine.match(/,/g) || []).length;
+  return tabCount > commaCount ? '\t' : ',';
+}
+
+function parseCSVLine(line: string, delimiter: string = ','): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -64,7 +71,7 @@ function parseCSVLine(line: string): string[] {
     if (ch === '"') {
       if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
       else inQuotes = !inQuotes;
-    } else if (ch === ',' && !inQuotes) {
+    } else if (ch === delimiter && !inQuotes) {
       result.push(current.trim());
       current = '';
     } else {
@@ -239,7 +246,11 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
     const lines = text.split(/\r?\n/).filter(l => l.trim());
     if (lines.length < 2) return res.status(400).json({ error: 'CSV must have a header row and at least one data row' });
 
-    const rawHeaders = parseCSVLine(lines[0]).map(h => h.replace(/^"|"$/g, '').trim());
+    // Auto-detect tab vs comma delimiter
+    const delimiter = detectDelimiter(lines[0]);
+    console.log(`[CSV Import] Detected delimiter: ${delimiter === '\t' ? 'TAB' : 'COMMA'}, ${lines.length - 1} data rows`);
+
+    const rawHeaders = parseCSVLine(lines[0], delimiter).map(h => h.replace(/^"|"$/g, '').trim());
     const headerMap = rawHeaders.map(h => {
       const key = h.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
       return CSV_FIELD_MAP[key] || null;
@@ -259,7 +270,7 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
 
     for (let i = 1; i < lines.length; i++) {
       try {
-        const vals = parseCSVLine(lines[i]);
+        const vals = parseCSVLine(lines[i], delimiter);
 
         // Skip completely empty rows
         const hasData = vals.some(v => v.replace(/^"|"$/g, '').trim().length > 0);
