@@ -2,13 +2,13 @@
 FROM node:20-slim AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev
+RUN npm ci --omit=dev --legacy-peer-deps
 
 # ── Stage 2: Build Next.js ──
 FROM node:20-slim AS builder
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 COPY . .
 # Build Next.js (needs all deps including devDeps for TypeScript etc.)
 RUN npm run build
