@@ -5,6 +5,8 @@ import { auth, adminOnly, leadgenOrAdmin, AuthRequest } from '../middleware/auth
 import { notifyLeadStatusChange, notifyNewLead, notifyFollowUpDue, notifyLeadImported } from '../utils/notificationHelper';
 import { getIO } from '../socket';
 
+import * as XLSX from 'xlsx';
+
 function emitLeadChange(action: string, data?: any) {
   try { getIO().emit('lead:changed', { action, ...(data || {}) }); } catch (_) { }
 }
@@ -12,74 +14,77 @@ function emitLeadChange(action: string, data?: any) {
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
   fileFilter: (_req, file, cb) => {
-    if (file.mimetype !== 'text/csv' && !file.originalname.toLowerCase().endsWith('.csv')) {
-      return cb(new Error('Only CSV files are allowed'));
+    const allowed = ['.csv', '.tsv', '.txt', '.xlsx', '.xls'];
+    const ext = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
+    if (!allowed.includes(ext)) {
+      return cb(new Error('Supported formats: .csv, .tsv, .xlsx, .xls'));
     }
     cb(null, true);
   },
 });
 
-// ── CSV column name → model field mapping ──
+// ── Column name → model field mapping (fuzzy - handles many variations) ──
 const CSV_FIELD_MAP: Record<string, string> = {
-  'date': 'date',
-  'source': 'source',
-  'name': 'name',
-  'title': 'title',
-  'company name': 'companyName',
-  'company': 'companyName',
-  'email': 'email',
-  'work direct phone': 'workDirectPhone',
-  'work phone': 'workDirectPhone',
-  'home phone': 'homePhone',
-  'home phone number': 'homePhone',
-  'mobile phone': 'mobilePhone',
-  'mobile': 'mobilePhone',
+  // Name variations
+  'date': 'date', 'added date': 'date', 'created': 'date', 'created date': 'date',
+  'source': 'source', 'lead source': 'source',
+  'name': 'name', 'full name': 'name', 'contact name': 'name', 'lead name': 'name', 'first name': 'name', 'fullname': 'name',
+  'title': 'title', 'job title': 'title', 'position': 'title', 'role': 'title', 'designation': 'title',
+  // Company
+  'company name': 'companyName', 'company': 'companyName', 'organization': 'companyName', 'org': 'companyName', 'firm': 'companyName', 'employer': 'companyName',
+  // Contact
+  'email': 'email', 'email address': 'email', 'e-mail': 'email', 'emailaddress': 'email',
+  'work direct phone': 'workDirectPhone', 'work phone': 'workDirectPhone', 'direct phone': 'workDirectPhone', 'office phone': 'workDirectPhone', 'business phone': 'workDirectPhone',
+  'phone': 'workDirectPhone', 'phone number': 'workDirectPhone', 'telephone': 'workDirectPhone', 'tel': 'workDirectPhone',
+  'home phone': 'homePhone', 'home phone number': 'homePhone',
+  'mobile phone': 'mobilePhone', 'mobile': 'mobilePhone', 'cell': 'mobilePhone', 'cell phone': 'mobilePhone', 'cellphone': 'mobilePhone',
   'corporate phone': 'corporatePhone',
   'other phone': 'otherPhone',
   'company phone': 'companyPhone',
-  'employees': 'employees',
-  'person linkedin url': 'personLinkedinUrl',
-  'linkedin': 'personLinkedinUrl',
-  'website': 'website',
-  'company linkedin url': 'companyLinkedinUrl',
-  'city': 'city',
-  'state': 'state',
-  'assigned': 'assignedAgent',
-  'assigned agent': 'assignedAgent',
-  'status': 'status',
-  'notes': 'notes',
-  'phone': 'workDirectPhone',
-  'follow-up date': 'nextFollowUp',
-  'follow up date': 'nextFollowUp',
+  // Numbers
+  'employees': 'employees', '# employees': 'employees', 'number of employees': 'employees', 'num employees': 'employees', 'employee count': 'employees', 'company size': 'employees',
+  // URLs
+  'person linkedin url': 'personLinkedinUrl', 'linkedin': 'personLinkedinUrl', 'linkedin url': 'personLinkedinUrl', 'linkedin profile': 'personLinkedinUrl',
+  'website': 'website', 'company website': 'website', 'url': 'website', 'web': 'website',
+  'company linkedin url': 'companyLinkedinUrl', 'company linkedin': 'companyLinkedinUrl',
+  // Location
+  'city': 'city', 'town': 'city',
+  'state': 'state', 'province': 'state', 'region': 'state',
+  'address': 'address', 'street': 'address', 'street address': 'address',
+  // Assignment
+  'assigned': 'assignedAgent', 'assigned agent': 'assignedAgent', 'agent': 'assignedAgent', 'owner': 'assignedAgent', 'rep': 'assignedAgent', 'sales rep': 'assignedAgent',
+  'status': 'status', 'lead status': 'status', 'stage': 'status',
+  'notes': 'notes', 'note': 'notes', 'comments': 'notes', 'comment': 'notes', 'description': 'notes',
+  'follow-up date': 'nextFollowUp', 'follow up date': 'nextFollowUp', 'followup': 'nextFollowUp', 'next follow up': 'nextFollowUp',
 };
 
-// Auto-detect whether the file uses tabs or commas as delimiter
-function detectDelimiter(headerLine: string): string {
-  const tabCount = (headerLine.match(/\t/g) || []).length;
-  const commaCount = (headerLine.match(/,/g) || []).length;
-  return tabCount > commaCount ? '\t' : ',';
-}
+// Valid enum values
+const VALID_SOURCES = ['CSV Import', 'Manual', 'Website', 'Referral', 'LinkedIn', 'Cold – High Fit', 'Warm – Engaged', 'Cold – Quick Sourced', 'Cold – Bulk Data', 'Other'];
+const VALID_STATUSES = ['New Lead', 'Working', 'Connected', 'Qualified', 'Meeting Booked', 'Meeting Completed', 'Proposal Sent', 'Negotiation', 'Closed Won', 'Closed Lost', 'Nurture'];
 
-function parseCSVLine(line: string, delimiter: string = ','): string[] {
-  const result: string[] = [];
-  let current = '';
-  let inQuotes = false;
-  for (let i = 0; i < line.length; i++) {
-    const ch = line[i];
-    if (ch === '"') {
-      if (inQuotes && line[i + 1] === '"') { current += '"'; i++; }
-      else inQuotes = !inQuotes;
-    } else if (ch === delimiter && !inQuotes) {
-      result.push(current.trim());
-      current = '';
-    } else {
-      current += ch;
-    }
-  }
-  result.push(current.trim());
-  return result;
+/** Parse any uploaded file (xlsx, xls, csv, tsv) into an array of row objects */
+function parseSpreadsheet(buffer: Buffer, filename: string): { headers: string[]; rows: Record<string, string>[] } {
+  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true, dateNF: 'yyyy-mm-dd' });
+  const sheetName = workbook.SheetNames[0];
+  const sheet = workbook.Sheets[sheetName];
+  const jsonData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+
+  if (jsonData.length < 2) return { headers: [], rows: [] };
+
+  const headers = jsonData[0].map((h: any) => String(h || '').trim());
+  const rows = jsonData.slice(1)
+    .filter(row => row.some((cell: any) => String(cell || '').trim() !== ''))
+    .map(row => {
+      const obj: Record<string, string> = {};
+      headers.forEach((h, i) => {
+        obj[h] = String(row[i] || '').trim();
+      });
+      return obj;
+    });
+
+  return { headers, rows };
 }
 
 // GET /api/leads — get all leads (admin) or agent's leads (sdr)
@@ -233,31 +238,30 @@ router.post('/', auth, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// Allowed enum values for validation
-const VALID_SOURCES = ['CSV Import', 'Manual', 'Website', 'Referral', 'LinkedIn', 'Cold – High Fit', 'Warm – Engaged', 'Cold – Quick Sourced', 'Cold – Bulk Data', 'Other'];
-const VALID_STATUSES = ['New Lead', 'Working', 'Connected', 'Qualified', 'Meeting Booked', 'Meeting Completed', 'Proposal Sent', 'Negotiation', 'Closed Won', 'Closed Lost', 'Nurture'];
-
-// POST /api/leads/import — CSV bulk import (flexible)
+// POST /api/leads/import — bulk import (CSV, TSV, Excel)
 router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-    const text = req.file.buffer.toString('utf-8');
-    const lines = text.split(/\r?\n/).filter(l => l.trim());
-    if (lines.length < 2) return res.status(400).json({ error: 'CSV must have a header row and at least one data row' });
+    // Parse file using SheetJS (handles xlsx, xls, csv, tsv automatically)
+    const { headers, rows } = parseSpreadsheet(req.file.buffer, req.file.originalname);
+    console.log(`[Import] File: ${req.file.originalname}, Headers: [${headers.join(', ')}], Rows: ${rows.length}`);
 
-    // Auto-detect tab vs comma delimiter
-    const delimiter = detectDelimiter(lines[0]);
-    console.log(`[CSV Import] Detected delimiter: ${delimiter === '\t' ? 'TAB' : 'COMMA'}, ${lines.length - 1} data rows`);
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'File has no data rows' });
+    }
 
-    const rawHeaders = parseCSVLine(lines[0], delimiter).map(h => h.replace(/^"|"$/g, '').trim());
-    const headerMap = rawHeaders.map(h => {
-      const key = h.toLowerCase().replace(/[^a-z0-9 ]/g, '').trim();
-      return CSV_FIELD_MAP[key] || null;
+    // Map headers to model fields
+    const headerMap: Record<string, string | null> = {};
+    const unmappedHeaders: string[] = [];
+    headers.forEach(h => {
+      const key = h.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+      const field = CSV_FIELD_MAP[key] || null;
+      headerMap[h] = field;
+      if (!field && h.trim()) unmappedHeaders.push(h);
     });
 
-    // Track which headers are unknown (not mapped) — we'll store their data in notes
-    const unmappedHeaders = rawHeaders.map((h, idx) => headerMap[idx] === null ? h : null);
+    console.log(`[Import] Mapped: ${Object.values(headerMap).filter(Boolean).length}/${headers.length} columns. Unmapped: [${unmappedHeaders.join(', ')}]`);
 
     // Get current user for default agent assignment
     const User = (await import('../models/User')).default;
@@ -266,16 +270,10 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
 
     const imported: any[] = [];
     const errors: { row: number; error: string }[] = [];
-    const skipped: number[] = [];
 
-    for (let i = 1; i < lines.length; i++) {
+    for (let i = 0; i < rows.length; i++) {
       try {
-        const vals = parseCSVLine(lines[i], delimiter);
-
-        // Skip completely empty rows
-        const hasData = vals.some(v => v.replace(/^"|"$/g, '').trim().length > 0);
-        if (!hasData) { skipped.push(i + 1); continue; }
-
+        const row = rows[i];
         const doc: any = {
           source: 'CSV Import',
           date: new Date(),
@@ -284,51 +282,46 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
         };
 
         // Map known columns
-        headerMap.forEach((field, idx) => {
-          if (!field || !vals[idx]) return;
-          const v = vals[idx].replace(/^"|"$/g, '').trim();
-          if (!v) return;
+        for (const [header, value] of Object.entries(row)) {
+          const field = headerMap[header];
+          if (!field || !value) continue;
+
           if (field === 'employees') {
-            doc[field] = parseInt(v, 10) || null;
+            const num = parseInt(String(value).replace(/[^0-9]/g, ''), 10);
+            doc[field] = isNaN(num) ? null : num;
           } else if (field === 'nextFollowUp' || field === 'date') {
-            const d = new Date(v);
+            const d = new Date(value);
             if (!isNaN(d.getTime())) doc[field] = d;
           } else {
-            doc[field] = v;
+            doc[field] = value;
           }
-        });
+        }
 
-        // Collect data from unknown/unmapped columns and append to notes
+        // Collect data from unknown columns and append to notes
         const extraFields: string[] = [];
-        unmappedHeaders.forEach((header, idx) => {
-          if (!header || !vals[idx]) return;
-          const v = vals[idx].replace(/^"|"$/g, '').trim();
-          if (v) extraFields.push(`${header}: ${v}`);
-        });
+        for (const header of unmappedHeaders) {
+          const val = row[header];
+          if (val) extraFields.push(`${header}: ${val}`);
+        }
         if (extraFields.length > 0) {
-          const existingNotes = doc.notes || '';
-          doc.notes = existingNotes
-            ? `${existingNotes}\n--- Extra CSV Fields ---\n${extraFields.join('\n')}`
-            : `--- Extra CSV Fields ---\n${extraFields.join('\n')}`;
+          doc.notes = (doc.notes || '') + (doc.notes ? '\n' : '') + extraFields.join(' | ');
         }
 
-        // If name is missing, use first available identifier or 'Unknown'
+        // If name is missing, use first available identifier
         if (!doc.name) {
-          doc.name = doc.email || doc.companyName || `Unknown Lead (Row ${i + 1})`;
+          doc.name = doc.email || doc.companyName || `Unknown Lead (Row ${i + 2})`;
         }
 
-        // If source from CSV is not a valid enum, keep default 'CSV Import'
+        // Validate source enum — fallback to 'CSV Import'
         if (doc.source && !VALID_SOURCES.includes(doc.source)) {
-          const originalSource = doc.source;
+          doc.notes = (doc.notes || '') + `\nOriginal source: ${doc.source}`;
           doc.source = 'CSV Import';
-          doc.notes = (doc.notes || '') + `\nOriginal source: ${originalSource}`;
         }
 
-        // If status from CSV is not a valid enum, keep default 'New Lead'
+        // Validate status enum — fallback to 'New Lead'
         if (doc.status && !VALID_STATUSES.includes(doc.status)) {
-          const originalStatus = doc.status;
+          doc.notes = (doc.notes || '') + `\nOriginal status: ${doc.status}`;
           doc.status = 'New Lead';
-          doc.notes = (doc.notes || '') + `\nOriginal status: ${originalStatus}`;
         }
 
         doc.addedBy = defaultAgent;
@@ -339,7 +332,8 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
         await lead.save();
         imported.push(lead);
       } catch (e: any) {
-        errors.push({ row: i + 1, error: e.message });
+        console.error(`[Import] Row ${i + 2} error:`, e.message);
+        errors.push({ row: i + 2, error: e.message });
       }
     }
 
@@ -349,16 +343,18 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
       emitLeadChange('imported', { count: imported.length });
     }
 
+    console.log(`[Import] Done: ${imported.length} imported, ${errors.length} errors`);
+
     res.json({
       imported: imported.length,
       errors: errors.length,
-      skipped: skipped.length,
+      skipped: 0,
       errorDetails: errors.slice(0, 20),
-      total: lines.length - 1,
+      total: rows.length,
     });
   } catch (err: any) {
-    console.error('CSV import error:', err);
-    res.status(500).json({ error: 'Import failed' });
+    console.error('Import error:', err);
+    res.status(500).json({ error: `Import failed: ${err.message}` });
   }
 });
 

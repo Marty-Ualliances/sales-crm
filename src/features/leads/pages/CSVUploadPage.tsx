@@ -4,6 +4,7 @@ import { Upload, FileSpreadsheet, CheckCircle, AlertCircle, ArrowRight, Loader2,
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { useImportCSV } from '@/hooks/useApi';
+import * as XLSX from 'xlsx';
 
 interface CSVRow {
   [key: string]: string;
@@ -17,6 +18,8 @@ const LEAD_FIELDS = [
   'City', 'State', 'Assigned', 'Status', 'Notes',
 ];
 
+const ACCEPTED_EXTENSIONS = '.csv,.tsv,.txt,.xlsx,.xls';
+
 export default function CSVUploadPage() {
   const [step, setStep] = useState<'upload' | 'preview' | 'importing' | 'done'>('upload');
   const [headers, setHeaders] = useState<string[]>([]);
@@ -27,60 +30,61 @@ export default function CSVUploadPage() {
 
   const importMutation = useImportCSV();
 
-  const parseCSVLine = (line: string, delimiter: string = ','): string[] => {
-    const result: string[] = [];
-    let current = '';
-    let inQuotes = false;
-    for (let i = 0; i < line.length; i++) {
-      const ch = line[i];
-      if (ch === '"') {
-        if (inQuotes && line[i + 1] === '"') {
-          current += '"';
-          i++;
-        } else {
-          inQuotes = !inQuotes;
-        }
-      } else if (ch === delimiter && !inQuotes) {
-        result.push(current.trim());
-        current = '';
-      } else {
-        current += ch;
-      }
-    }
-    result.push(current.trim());
-    return result;
-  };
+  const parseFile = (f: File) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const data = new Uint8Array(e.target?.result as ArrayBuffer);
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true, dateNF: 'yyyy-mm-dd' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const jsonData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
 
-  const parseCSV = (text: string) => {
-    const lines = text.trim().split(/\r?\n/);
-    // Auto-detect tab vs comma
-    const tabCount = (lines[0].match(/\t/g) || []).length;
-    const commaCount = (lines[0].match(/,/g) || []).length;
-    const delimiter = tabCount > commaCount ? '\t' : ',';
-    const h = parseCSVLine(lines[0], delimiter).map(s => s.replace(/^"|"$/g, ''));
-    setHeaders(h);
-    const data = lines.slice(1).filter(l => l.trim()).map(line => {
-      const vals = parseCSVLine(line, delimiter).map(s => s.replace(/^"|"$/g, ''));
-      const row: CSVRow = {};
-      h.forEach((header, i) => (row[header] = vals[i] || ''));
-      return row;
-    });
-    setRows(data);
-    setStep('preview');
+        if (jsonData.length < 2) {
+          setHeaders([]);
+          setRows([]);
+          return;
+        }
+
+        const h = jsonData[0].map((cell: any) => String(cell || '').trim()).filter(Boolean);
+        setHeaders(h);
+
+        const parsedRows = jsonData.slice(1)
+          .filter(row => row.some((cell: any) => String(cell || '').trim() !== ''))
+          .map(row => {
+            const obj: CSVRow = {};
+            h.forEach((header, i) => {
+              obj[header] = String(row[i] || '').trim();
+            });
+            return obj;
+          });
+
+        setRows(parsedRows);
+        setStep('preview');
+      } catch (err) {
+        console.error('File parse error:', err);
+        setHeaders([]);
+        setRows([]);
+      }
+    };
+    reader.readAsArrayBuffer(f);
   };
 
   const handleFile = (f: File) => {
     setFile(f);
-    const reader = new FileReader();
-    reader.onload = (e) => parseCSV(e.target?.result as string);
-    reader.readAsText(f);
+    parseFile(f);
+  };
+
+  const isAcceptedFile = (f: File) => {
+    const ext = f.name.toLowerCase();
+    return ext.endsWith('.csv') || ext.endsWith('.tsv') || ext.endsWith('.txt') || ext.endsWith('.xlsx') || ext.endsWith('.xls');
   };
 
   const handleDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
     const f = e.dataTransfer.files[0];
-    if (f?.name.endsWith('.csv') || f?.name.endsWith('.tsv') || f?.name.endsWith('.txt')) handleFile(f);
+    if (f && isAcceptedFile(f)) handleFile(f);
   }, []);
 
   const handleImport = async () => {
@@ -111,8 +115,8 @@ export default function CSVUploadPage() {
     <div className="space-y-6 max-w-4xl">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">CSV Upload</h1>
-          <p className="text-sm text-muted-foreground mt-1">Import leads in bulk from a CSV file</p>
+          <h1 className="text-2xl font-bold text-foreground">Import Leads</h1>
+          <p className="text-sm text-muted-foreground mt-1">Import leads from CSV, TSV, or Excel files</p>
         </div>
         <Button variant="outline" size="sm" onClick={downloadTemplate}>
           <Download className="h-4 w-4 mr-2" />
@@ -145,23 +149,23 @@ export default function CSVUploadPage() {
             className={`rounded-xl border-2 border-dashed p-12 text-center transition-colors ${dragOver ? 'border-primary bg-accent' : 'border-border bg-card'}`}
           >
             <Upload className="h-10 w-10 mx-auto mb-4 text-muted-foreground" />
-            <p className="text-lg font-medium text-foreground mb-2">Drop your CSV file here</p>
-            <p className="text-sm text-muted-foreground mb-4">or click to browse</p>
-            <input type="file" accept=".csv,.tsv,.txt" className="hidden" id="csv-input" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
+            <p className="text-lg font-medium text-foreground mb-2">Drop your file here</p>
+            <p className="text-sm text-muted-foreground mb-4">Supports CSV, TSV, Excel (.xlsx, .xls)</p>
+            <input type="file" accept={ACCEPTED_EXTENSIONS} className="hidden" id="csv-input" onChange={e => e.target.files?.[0] && handleFile(e.target.files[0])} />
             <Button onClick={() => document.getElementById('csv-input')?.click()}>
               <FileSpreadsheet className="h-4 w-4 mr-2" />
-              Select CSV File
+              Select File
             </Button>
           </div>
 
           <div className="rounded-xl border border-border bg-card p-4 shadow-card">
-            <h3 className="text-sm font-semibold text-foreground mb-2">Expected CSV Columns</h3>
+            <h3 className="text-sm font-semibold text-foreground mb-2">Expected Columns (auto-matched)</h3>
             <div className="flex flex-wrap gap-1.5">
               {LEAD_FIELDS.map(f => (
                 <Badge key={f} variant="secondary" className="text-xs">{f}</Badge>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground mt-2">Column headers are auto-matched. Only "Name" is required — all other fields are optional.</p>
+            <p className="text-xs text-muted-foreground mt-2">Column headers are auto-matched. Only "Name" is recommended — all other fields are optional. Unrecognized columns are saved in notes.</p>
           </div>
         </div>
       )}
