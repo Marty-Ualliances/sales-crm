@@ -1,5 +1,0 @@
-{
-  "/(dashboard)/admin/page": "app/(dashboard)/admin/page.js",
-  "/(dashboard)/leadgen/page": "app/(dashboard)/leadgen/page.js",
-  "/(dashboard)/leadgen/upload/page": "app/(dashboard)/leadgen/upload/page.js"
-}

@@ -1,3 +1,0 @@
-module.exports=[2640,a=>{"use strict";var b=a.i(7997);function c(){return(0,b.jsxs)("div",{className:"space-y-6 animate-pulse",children:[(0,b.jsx)("div",{className:"h-8 w-48 rounded-lg bg-muted"}),(0,b.jsx)("div",{className:"grid grid-cols-2 lg:grid-cols-5 gap-4",children:Array.from({length:5}).map((a,c)=>(0,b.jsx)("div",{className:"h-28 rounded-xl bg-muted"},c))}),(0,b.jsx)("div",{className:"h-72 rounded-xl bg-muted"})]})}a.s(["default",()=>c])}];
-
-//# sourceMappingURL=src_app_%28dashboard%29_hr_loading_tsx_0b327a93._.js.map
