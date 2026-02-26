@@ -152,12 +152,14 @@ nextApp.prepare().then(() => {
   });
 
   // API 404 handler
-  app.all('/api/*', (_req: Request, res: Response) => {
-    res.status(404).json({ error: 'API endpoint not found' });
+  app.use('/api', (req: Request, res: Response) => {
+    if (!res.headersSent) {
+      res.status(404).json({ error: 'API endpoint not found' });
+    }
   });
 
   // ── Let Next.js Handle Everything Else ──
-  app.all('*', (req: Request, res: Response) => {
+  app.use((req: Request, res: Response) => {
     return nextHandler(req, res);
   });
 
