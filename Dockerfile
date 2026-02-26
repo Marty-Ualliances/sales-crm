@@ -15,16 +15,14 @@ RUN npm install -g tsx
 
 ENV NODE_ENV=production
 
-# Copy full node_modules (needed by Express server)
-COPY --from=builder /app/node_modules ./node_modules
-
-# Copy Next.js standalone server + config
-COPY --from=builder /app/.next/standalone/server.js ./server.js
+# Copy the ENTIRE standalone directory (includes server.js + .next/server with pages)
+COPY --from=builder /app/.next/standalone ./
+# Copy static assets (not included in standalone)
 COPY --from=builder /app/.next/static ./.next/static
+# Copy public files (not included in standalone)
 COPY --from=builder /app/public ./public
-COPY --from=builder /app/package.json ./
 
-# Copy server source files (Express API)
+# Copy Express server source files
 COPY --from=builder /app/server ./server
 COPY --from=builder /app/tsconfig.json ./
 
