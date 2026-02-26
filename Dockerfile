@@ -6,17 +6,11 @@ RUN npm ci --legacy-peer-deps
 COPY . .
 RUN npm run build
 
-# ── Stage 2: Production dependencies only ──
-FROM node:20-slim AS deps
-WORKDIR /app
-COPY package.json package-lock.json ./
-RUN npm ci --omit=dev --legacy-peer-deps
-
-# ── Stage 3: Production image ──
+# ── Stage 2: Production image ──
 FROM node:20-slim AS runner
 WORKDIR /app
 
-# Install procps (provides 'ps' command needed by concurrently) and clean up
+# Install procps (provides 'ps' command needed by concurrently)
 RUN apt-get update && apt-get install -y --no-install-recommends procps && rm -rf /var/lib/apt/lists/*
 
 # Install process manager & tsx globally
@@ -24,19 +18,15 @@ RUN npm install -g concurrently tsx
 
 ENV NODE_ENV=production
 
-# Copy production node_modules
-COPY --from=deps /app/node_modules ./node_modules
-# Copy built Next.js app
+# Copy everything needed from builder
+COPY --from=builder /app/node_modules ./node_modules
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/next.config.mjs ./
 COPY --from=builder /app/package.json ./
-
-# Copy server source files (Express API)
 COPY --from=builder /app/server ./server
 COPY --from=builder /app/tsconfig.json ./
 
 EXPOSE 3000 3001
 
-# Run both services using node_modules/.bin/next directly
-CMD ["concurrently", "--kill-others", "node_modules/.bin/next start -p 3000", "tsx server/index.ts"]
+CMD ["concurrently", "--kill-others", "npx next start -p 3000", "tsx server/index.ts"]
