@@ -10,29 +10,27 @@ RUN npm run build
 FROM node:20-slim AS runner
 WORKDIR /app
 
-# Install tsx globally for running the Express server
+# Install tsx globally for TypeScript server execution
 RUN npm install -g tsx
 
 ENV NODE_ENV=production
 
-# 1. Copy standalone build FIRST (includes minimal node_modules + .next/server pages)
+# 1. Copy standalone build (includes server.js + compiled pages in .next/)
 COPY --from=builder /app/.next/standalone ./
 
-# 2. Copy FULL node_modules ON TOP (overwrites standalone's minimal deps, adds express etc.)
+# 2. Overlay full node_modules (adds express, mongoose, etc. that standalone excludes)
 COPY --from=builder /app/node_modules ./node_modules
 
-# 3. Copy static assets + public (not included in standalone)
+# 3. Copy static and public assets (not included in standalone)
 COPY --from=builder /app/.next/static ./.next/static
 COPY --from=builder /app/public ./public
 
-# 4. Copy Express server source files
+# 4. Copy Express API source
 COPY --from=builder /app/server ./server
 COPY --from=builder /app/tsconfig.json ./
 
-# 5. Copy startup script
-COPY start.sh ./start.sh
-RUN chmod +x ./start.sh
-
 EXPOSE 3000
 
-CMD ["./start.sh"]
+# Run Express on 3001 (internal), Next.js on 3000 (public)
+# Using sh -c to avoid CRLF issues and properly manage both processes
+CMD ["sh", "-c", "API_PORT=3001 PORT=3001 npx tsx server/index.ts & PORT=3000 HOSTNAME=0.0.0.0 node server.js"]

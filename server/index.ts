@@ -31,7 +31,7 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 
 const app = express();
 const httpServer = http.createServer(app);
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.API_PORT || process.env.PORT || 3001;
 const isProduction = process.env.NODE_ENV === 'production';
 console.log(`[BOOT] PORT=${PORT}, NODE_ENV=${process.env.NODE_ENV}, isProduction=${isProduction}`);
 
