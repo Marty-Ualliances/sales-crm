@@ -5,11 +5,12 @@ const port = process.env.PORT || '3000';
 console.log(`Railway PORT is: ${port}`);
 console.log('Express API will run on inner port: 3001');
 
-// 1. Start Express API Backend (always on 3001)
+// 1. Start Express API Backend (on dynamic INTERNAL_PORT)
+const internalPort = process.env.INTERNAL_PORT || '3001';
 const apiProcess = spawn('npx', ['tsx', 'server/index.ts'], {
     stdio: 'inherit',
     shell: true, // Needs shell for npx resolution on some systems
-    env: { ...process.env, PORT: '3001' } // Force 3001 down to Express
+    env: { ...process.env, INTERNAL_PORT: internalPort } // Pass internal port down to Express
 });
 
 apiProcess.on('close', (code) => {

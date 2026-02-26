@@ -5,10 +5,11 @@ const nextConfig = {
         ignoreBuildErrors: true,
     },
     async rewrites() {
+        const apiPort = process.env.INTERNAL_PORT || 3001;
         return [
             {
                 source: '/api/:path*',
-                destination: 'http://localhost:3001/api/:path*',
+                destination: `http://localhost:${apiPort}/api/:path*`,
             },
         ];
     },
