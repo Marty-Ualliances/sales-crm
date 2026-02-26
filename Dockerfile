@@ -10,11 +10,8 @@ RUN npm run build
 FROM node:20-slim AS runner
 WORKDIR /app
 
-# Install procps (provides 'ps' command needed by concurrently)
-RUN apt-get update && apt-get install -y --no-install-recommends procps && rm -rf /var/lib/apt/lists/*
-
-# Install process manager & tsx globally
-RUN npm install -g concurrently tsx
+# Install tsx globally for running the Express server
+RUN npm install -g tsx
 
 ENV NODE_ENV=production
 
@@ -27,6 +24,10 @@ COPY --from=builder /app/package.json ./
 COPY --from=builder /app/server ./server
 COPY --from=builder /app/tsconfig.json ./
 
-EXPOSE 3000 3001
+# Copy startup script
+COPY start.sh ./start.sh
+RUN chmod +x ./start.sh
 
-CMD ["concurrently", "--kill-others", "npx next start -p 3000", "tsx server/index.ts"]
+EXPOSE 3000
+
+CMD ["./start.sh"]
