@@ -1,16 +1,14 @@
 {
-  "name": "vite_react_shadcn_ts",
+  "name": "sales-crm",
   "private": true,
-  "version": "0.0.0",
+  "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "next dev",
-    "dev:server": "tsx watch server/index.ts",
-    "dev:all": "concurrently \"npm run dev\" \"npm run dev:server\"",
+    "dev": "tsx watch server/index.ts",
+    "dev:next": "next dev",
     "seed": "tsx server/seed.ts",
     "build": "next build",
-    "start": "next start",
-    "start:server": "tsx server/index.ts",
+    "start": "tsx server/index.ts",
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest"
@@ -81,6 +79,7 @@
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.9",
     "xlsx": "^0.18.5",
+    "tsx": "^4.21.0",
     "zod": "^3.25.76"
   },
   "devDependencies": {
@@ -99,7 +98,6 @@
     "@types/react": "^18.3.23",
     "@types/react-dom": "^18.3.7",
     "autoprefixer": "^10.4.21",
-    "concurrently": "^9.2.1",
     "eslint": "^9.32.0",
     "eslint-plugin-react-hooks": "^5.2.0",
     "eslint-plugin-react-refresh": "^0.4.20",
@@ -108,7 +106,6 @@
     "lovable-tagger": "^1.1.13",
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
-    "tsx": "^4.21.0",
     "typescript": "^5.8.3",
     "typescript-eslint": "^8.38.0",
     "vitest": "^3.2.4"

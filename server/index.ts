@@ -59,11 +59,18 @@ const parsedOrigins = allowedOriginsString
 const corsOptions = {
   origin: isProduction
     ? (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      if (!origin || parsedOrigins.includes(origin) || origin.includes('railway.app')) {
+      // Allow: no origin (same-origin/SSR), configured origins, railway.app, localhost
+      if (
+        !origin ||
+        parsedOrigins.includes(origin) ||
+        origin.includes('railway.app') ||
+        origin.includes('localhost') ||
+        origin.includes('127.0.0.1')
+      ) {
         callback(null, true);
       } else {
         console.error(`CORS BLOCKED Origin: ${origin}`);
-        callback(new Error('Not allowed by CORS'));
+        callback(null, false); // Reject without throwing (avoids 500)
       }
     }
     : true,
