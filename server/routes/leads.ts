@@ -170,8 +170,8 @@ router.get('/funnel', auth, adminOnly, async (_req: AuthRequest, res: Response) 
 
     const total = leads.length || 1; // avoid div/0
     const stages = PIPELINE_STAGES.map(s => {
-      const count = leads.filter((l: any) => l.status === s.key).length;
-      return { stage: s.key, label: s.label, count, pct: Math.round((count / total) * 100) };
+      const count = leads.filter((l: any) => l.status === s).length;
+      return { stage: s, label: s, count, pct: Math.round((count / total) * 100) };
     });
 
     const closedWon = leads.filter((l: any) => l.status === 'Closed Won').length;
@@ -251,14 +251,60 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
       return res.status(400).json({ error: 'File has no data rows' });
     }
 
-    // Map headers to model fields
+    // Map headers to model fields with robust substring/fuzzy matching
     const headerMap: Record<string, string | null> = {};
     const unmappedHeaders: string[] = [];
+
+    // All valid schema fields to map
+    const VALID_FIELDS = [
+      'date', 'source', 'name', 'title', 'companyName', 'email', 'workDirectPhone',
+      'homePhone', 'mobilePhone', 'corporatePhone', 'otherPhone', 'companyPhone',
+      'employees', 'personLinkedinUrl', 'website', 'companyLinkedinUrl', 'address',
+      'city', 'state', 'status', 'assignedAgent', 'notes', 'nextFollowUp',
+      'priority', 'segment', 'sourceChannel'
+    ];
+
     headers.forEach(h => {
-      const key = h.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
-      const field = CSV_FIELD_MAP[key] || null;
-      headerMap[h] = field;
-      if (!field && h.trim()) unmappedHeaders.push(h);
+      if (!h.trim()) return;
+      const cleanKey = h.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
+      const noSpaceKey = cleanKey.replace(/\s/g, '');
+
+      let mappedField = CSV_FIELD_MAP[cleanKey] || CSV_FIELD_MAP[noSpaceKey] || null;
+
+      // Try exact schema match
+      if (!mappedField) {
+        const exactMatch = VALID_FIELDS.find(f => f.toLowerCase() === noSpaceKey);
+        if (exactMatch) mappedField = exactMatch;
+      }
+
+      // Robust partial matches for critical fields
+      if (!mappedField) {
+        if (cleanKey.includes('email')) mappedField = 'email';
+        else if (cleanKey.includes('company') && (cleanKey.includes('name') || noSpaceKey === 'company')) mappedField = 'companyName';
+        else if (cleanKey.includes('first') || cleanKey.includes('last') || cleanKey.includes('name')) mappedField = 'name';
+        else if (cleanKey.includes('title') || cleanKey.includes('role')) mappedField = 'title';
+        else if (cleanKey.includes('mobile') || cleanKey.includes('cell')) mappedField = 'mobilePhone';
+        else if (cleanKey.includes('phone') || cleanKey.includes('tel')) {
+          if (cleanKey.includes('company') || cleanKey.includes('office') || cleanKey.includes('biz')) mappedField = 'companyPhone';
+          else if (cleanKey.includes('home')) mappedField = 'homePhone';
+          else mappedField = 'workDirectPhone';
+        }
+        else if (cleanKey.includes('linkedin')) {
+          if (cleanKey.includes('company')) mappedField = 'companyLinkedinUrl';
+          else mappedField = 'personLinkedinUrl';
+        }
+        else if (cleanKey.includes('web') || cleanKey.includes('url')) mappedField = 'website';
+        else if (cleanKey.includes('address') || cleanKey.includes('street')) mappedField = 'address';
+        else if (cleanKey.includes('city')) mappedField = 'city';
+        else if (cleanKey.includes('state') || cleanKey.includes('province')) mappedField = 'state';
+        else if (cleanKey.includes('employee') || cleanKey.includes('size')) mappedField = 'employees';
+        else if (cleanKey.includes('note') || cleanKey.includes('comment')) mappedField = 'notes';
+        else if (cleanKey.includes('status') || cleanKey.includes('stage')) mappedField = 'status';
+        else if (cleanKey.includes('agent') || cleanKey.includes('owner') || cleanKey.includes('rep') || cleanKey.includes('assign')) mappedField = 'assignedAgent';
+      }
+
+      headerMap[h] = mappedField;
+      if (!mappedField) unmappedHeaders.push(h);
     });
 
     console.log(`[Import] Mapped: ${Object.values(headerMap).filter(Boolean).length}/${headers.length} columns. Unmapped: [${unmappedHeaders.join(', ')}]`);

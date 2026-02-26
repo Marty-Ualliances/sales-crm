@@ -2,10 +2,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/services/api';
 
-export function useHRDashboard() {
+export function useHRDashboard(timeRange?: string) {
     return useQuery({
-        queryKey: ['hr-dashboard'],
-        queryFn: () => api.hr.dashboard(),
+        queryKey: ['hr-dashboard', timeRange],
+        queryFn: () => api.hr.dashboard(timeRange),
         staleTime: 30_000,
     });
 }

@@ -8,9 +8,9 @@ import DateFilter, { DateRange, filterByDateRange } from '@/components/common/Da
 import { useState, useMemo } from 'react';
 
 export default function HRDashboard() {
-  const { data, isLoading } = useHRDashboard();
-  const router = useRouter();
   const [dateRange, setDateRange] = useState<DateRange>('last7days');
+  const { data, isLoading } = useHRDashboard(dateRange);
+  const router = useRouter();
 
   if (isLoading) {
     return (

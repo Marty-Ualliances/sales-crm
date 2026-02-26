@@ -1,5 +1,5 @@
 'use client';
-import { useCalls } from '@/hooks/useApi';
+import { useCalls, useUpdateCall } from '@/hooks/useApi';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { Phone, PlayCircle, Search, Loader2, Edit2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
@@ -16,6 +16,7 @@ import { toast } from 'sonner';
 export default function MyCallsPage() {
   const { user } = useAuth();
   const { data: allCalls = [], isLoading } = useCalls();
+  const updateCall = useUpdateCall();
   const calls = allCalls.filter((c: any) => c.agentName === user?.name);
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -57,10 +58,19 @@ export default function MyCallsPage() {
     setEditDialogOpen(true);
   };
 
-  const handleSaveEdit = () => {
-    toast.success('Call updated successfully');
-    setEditDialogOpen(false);
-    setSelectedCall(null);
+  const handleSaveEdit = async () => {
+    if (!selectedCall) return;
+    try {
+      await updateCall.mutateAsync({
+        id: selectedCall.id,
+        data: editForm
+      });
+      toast.success('Call updated successfully');
+      setEditDialogOpen(false);
+      setSelectedCall(null);
+    } catch (error) {
+      toast.error('Failed to update call');
+    }
   };
 
   if (isLoading) {
@@ -230,8 +240,11 @@ export default function MyCallsPage() {
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>Cancel</Button>
-            <Button onClick={handleSaveEdit} className="gradient-primary border-0">Save Changes</Button>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={updateCall.isPending}>Cancel</Button>
+            <Button onClick={handleSaveEdit} disabled={updateCall.isPending} className="gradient-primary border-0">
+              {updateCall.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+              Save Changes
+            </Button>
           </div>
         </DialogContent>
       </Dialog>

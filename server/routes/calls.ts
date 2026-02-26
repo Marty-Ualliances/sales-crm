@@ -1,6 +1,7 @@
 import { Router, Response } from 'express';
 import Call from '../models/Call';
 import { auth, AuthRequest } from '../middleware/auth';
+import { z } from 'zod';
 
 const router = Router();
 
@@ -104,6 +105,55 @@ router.put('/:id/recording', auth, async (req: AuthRequest, res: Response) => {
     await call.save();
     res.json(call);
   } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+const updateCallSchema = z.object({
+  status: z.enum(['Completed', 'Missed', 'Follow-up']).optional(),
+  notes: z.string().optional(),
+  duration: z.string().optional(),
+  date: z.string().optional(),
+  time: z.string().optional(),
+  hasRecording: z.boolean().optional(),
+  recordingUrl: z.string().optional(),
+  recordingFlagged: z.boolean().optional(),
+});
+
+// PUT /api/calls/:id — update call details
+router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
+  try {
+    const call = await Call.findById(req.params.id);
+    if (!call) return res.status(404).json({ error: 'Call not found' });
+
+    // Ensure users can only update their own calls, unless they are admin/hr/leadgen
+    if (req.user!.role === 'sdr') {
+      const User = (await import('../models/User')).default;
+      const user = await User.findById(req.user!.id);
+      if (user && call.agentName !== user.name) {
+        return res.status(403).json({ error: 'Not authorized to update this call' });
+      }
+    }
+
+    const parsed = updateCallSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid data', details: parsed.error.errors });
+    }
+    const updates = parsed.data;
+
+    if (updates.date) call.date = new Date(updates.date);
+    if (updates.time !== undefined) call.time = updates.time;
+    if (updates.status !== undefined) call.status = updates.status;
+    if (updates.notes !== undefined) call.notes = updates.notes;
+    if (updates.duration !== undefined) call.duration = updates.duration;
+    if (updates.hasRecording !== undefined) call.hasRecording = updates.hasRecording;
+    if (updates.recordingUrl !== undefined) call.recordingUrl = updates.recordingUrl;
+    if (updates.recordingFlagged !== undefined) call.recordingFlagged = updates.recordingFlagged;
+
+    await call.save();
+    res.json(call);
+  } catch (err) {
+    console.error('Update call error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

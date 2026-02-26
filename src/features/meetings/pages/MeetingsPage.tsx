@@ -17,6 +17,8 @@ type MeetingFormData = {
     confirmationSent: boolean;
     nextStep: string;
     outcome: string;
+    ams?: string;
+    driveLink?: string;
 };
 
 const emptyForm: MeetingFormData = {
@@ -31,6 +33,8 @@ const emptyForm: MeetingFormData = {
     confirmationSent: false,
     nextStep: '',
     outcome: '',
+    ams: '',
+    driveLink: '',
 };
 
 export default function MeetingsPage() {
@@ -94,6 +98,8 @@ export default function MeetingsPage() {
             confirmationSent: meeting.confirmationSent || false,
             nextStep: meeting.nextStep || '',
             outcome: meeting.outcome || '',
+            ams: meeting.ams || '',
+            driveLink: meeting.driveLink || '',
         });
         setEditId(meeting.id);
         setShowForm(true);
@@ -257,6 +263,16 @@ export default function MeetingsPage() {
                                         placeholder="What happened? What was agreed?"
                                     />
                                 </div>
+                                <div className="md:col-span-2">
+                                    <label className="block text-xs font-medium text-muted-foreground mb-1">Recording (Drive Link)</label>
+                                    <input
+                                        type="url"
+                                        className="w-full h-9 rounded-lg border border-input bg-background px-3 text-sm"
+                                        value={form.driveLink}
+                                        onChange={e => setForm(f => ({ ...f, driveLink: e.target.value }))}
+                                        placeholder="https://drive.google.com/..."
+                                    />
+                                </div>
                             </>
                         )}
                     </div>
@@ -309,6 +325,12 @@ export default function MeetingsPage() {
                                             <span className="flex items-center gap-1">
                                                 <Link2 className="h-3.5 w-3.5" />
                                                 Lead: {meeting.leadName}
+                                            </span>
+                                        )}
+                                        {meeting.ams && (
+                                            <span className="flex items-center gap-1">
+                                                <User className="h-3.5 w-3.5" />
+                                                AMS: {meeting.ams}
                                             </span>
                                         )}
                                     </div>

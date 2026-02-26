@@ -1,14 +1,17 @@
 'use client';
 import { useRouter, usePathname } from 'next/navigation';
+import { useState } from 'react';
 import Link from 'next/link';
 import { Phone, Edit, CheckCircle, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Lead, LeadStatus } from '@/features/leads/types/leads';
-import { useCompleteFollowUp, useCreateCall } from '@/hooks/useApi';
+import { useCompleteFollowUp, useCreateCall, useUpdateLead, useCreateMeeting, useMeetings, useUpdateMeeting } from '@/hooks/useApi';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { toast } from 'sonner';
-import { getStageBadgeClass, getPriorityBadgeClass } from '@/features/leads/constants/pipeline';
+import { getStageBadgeClass, getPriorityBadgeClass, PIPELINE_STAGES } from '@/features/leads/constants/pipeline';
+import { MeetingBookedModal, MeetingBookedData } from '@/features/meetings/components/MeetingBookedModal';
+import { MeetingCompletedModal } from '@/features/meetings/components/MeetingCompletedModal';
 
 /** Strips a phone string down to digits (preserving leading +) for tel: URI */
 function toTelUri(phone: string): string {
@@ -21,6 +24,75 @@ export default function LeadTable({ leads, compact = false }: { leads: Lead[]; c
   const completeFollowUp = useCompleteFollowUp();
   const createCall = useCreateCall();
   const { user } = useAuth();
+  const updateLead = useUpdateLead();
+  const createMeeting = useCreateMeeting();
+  const { data: meetings = [] } = useMeetings();
+  const updateMeetingApi = useUpdateMeeting();
+
+  const [activeLead, setActiveLead] = useState<Lead | null>(null);
+  const [showMeetingBookedModal, setShowMeetingBookedModal] = useState(false);
+  const [showMeetingCompletedModal, setShowMeetingCompletedModal] = useState(false);
+
+  const handleStatusChange = async (lead: Lead, newStatus: string) => {
+    if (newStatus === 'Meeting Booked') {
+      setActiveLead(lead);
+      setShowMeetingBookedModal(true);
+      return;
+    }
+    if (newStatus === 'Meeting Completed') {
+      setActiveLead(lead);
+      setShowMeetingCompletedModal(true);
+      return;
+    }
+    try {
+      await updateLead.mutateAsync({ id: lead.id, data: { status: newStatus } });
+      toast.success(`Status updated to ${newStatus}`);
+    } catch {
+      toast.error('Failed to update status');
+    }
+  };
+
+  const onMeetingBooked = async (data: MeetingBookedData) => {
+    if (!activeLead) return;
+    try {
+      // 1. Create the meeting
+      await createMeeting.mutateAsync({
+        title: `Meeting with ${activeLead.name}`,
+        date: data.date,
+        time: data.time,
+        duration: 30,
+        leadId: activeLead.id,
+        leadName: activeLead.name,
+        ams: data.ams,
+        description: data.notes,
+        status: 'scheduled'
+      });
+      // 2. Update the Lead status
+      await updateLead.mutateAsync({ id: activeLead.id, data: { status: 'Meeting Booked' } });
+      toast.success('Meeting booked successfully');
+    } catch {
+      toast.error('Failed to book meeting');
+    }
+  };
+
+  const onMeetingCompleted = async (driveLink: string) => {
+    if (!activeLead) return;
+    try {
+      // Find the most recent scheduled meeting for this lead
+      const activeLeadMeetings = meetings.filter((m: any) => m.leadId === activeLead.id && m.status === 'scheduled');
+      if (activeLeadMeetings.length > 0) {
+        // Update the meeting to completed with the drive link
+        const meetingToUpdate = activeLeadMeetings[0];
+        await updateMeetingApi.mutateAsync({ id: meetingToUpdate.id, data: { status: 'completed', driveLink } });
+      }
+
+      await updateLead.mutateAsync({ id: activeLead.id, data: { status: 'Meeting Completed' } });
+      toast.success('Meeting marked as completed');
+    } catch {
+      toast.error('Failed to complete meeting');
+    }
+  };
+
 
   const handleLogCall = async (lead: Lead, note: string) => {
     try {
@@ -115,9 +187,15 @@ export default function LeadTable({ leads, compact = false }: { leads: Lead[]; c
                   </td>
                   <td className="px-4 py-3 text-muted-foreground hidden xl:table-cell">{lead.email || '—'}</td>
                   <td className="px-4 py-3">
-                    <span className={`inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium ${getStageBadgeClass(lead.status)}`}>
-                      {lead.status}
-                    </span>
+                    <select
+                      value={lead.status}
+                      onChange={(e) => handleStatusChange(lead, e.target.value)}
+                      className={`cursor-pointer appearance-none outline-none inline-flex items-center rounded-full border px-2.5 py-0.5 text-xs font-medium bg-transparent ${getStageBadgeClass(lead.status)}`}
+                    >
+                      {PIPELINE_STAGES.map(s => (
+                        <option key={s.key} value={s.key} className="bg-background text-foreground">{s.label}</option>
+                      ))}
+                    </select>
                   </td>
                   <td className="px-4 py-3 hidden sm:table-cell">
                     <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-semibold ${getPriorityBadgeClass(lead.priority)}`}>
@@ -195,6 +273,19 @@ export default function LeadTable({ leads, compact = false }: { leads: Lead[]; c
           </tbody>
         </table>
       </div>
+
+      <MeetingBookedModal
+        open={showMeetingBookedModal}
+        onOpenChange={setShowMeetingBookedModal}
+        leadName={activeLead?.name || ''}
+        onSubmit={onMeetingBooked}
+      />
+      <MeetingCompletedModal
+        open={showMeetingCompletedModal}
+        onOpenChange={setShowMeetingCompletedModal}
+        leadName={activeLead?.name || ''}
+        onSubmit={onMeetingCompleted}
+      />
     </div>
   );
 }

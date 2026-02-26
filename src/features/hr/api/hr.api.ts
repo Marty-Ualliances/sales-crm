@@ -1,7 +1,7 @@
 import { request } from '@/services/api/client';
 
 export const hrApi = {
-    dashboard: () => request<any>('/hr/dashboard'),
+    dashboard: (timeRange?: string) => request<any>(`/hr/dashboard${timeRange ? `?timeRange=${timeRange}` : ''}`),
     leads: (params?: { status?: string; search?: string; agent?: string }) => {
         const q = new URLSearchParams();
         if (params?.status) q.set('status', params.status);

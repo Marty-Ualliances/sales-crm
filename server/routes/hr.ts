@@ -15,22 +15,44 @@ function hrAccess(req: AuthRequest, res: Response, next: any) {
 }
 
 // GET /api/hr/dashboard — HR dashboard stats
-router.get('/dashboard', auth, hrAccess, async (_req: AuthRequest, res: Response) => {
+router.get('/dashboard', auth, hrAccess, async (req: AuthRequest, res: Response) => {
   try {
-    const totalLeads = await Lead.countDocuments();
-    const closedLeads = await Lead.countDocuments({ status: 'Closed Won' });
-    const lostLeads = await Lead.countDocuments({ status: 'Closed Lost' });
+    const { timeRange } = req.query;
+
+    // Build date filter based on timeRange
+    const dateFilter: any = {};
+    if (timeRange && timeRange !== 'allTime') {
+      const now = new Date();
+      let startDate = new Date();
+      if (timeRange === 'last7days') {
+        startDate.setDate(now.getDate() - 7);
+      } else if (timeRange === 'last30days') {
+        startDate.setDate(now.getDate() - 30);
+      } else if (timeRange === 'thisMonth') {
+        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+      }
+      dateFilter.createdAt = { $gte: startDate };
+    }
+
+    const totalLeadsQuery = { ...dateFilter };
+    const closedLeadsQuery = { status: 'Closed Won', ...dateFilter };
+    const lostLeadsQuery = { status: 'Closed Lost', ...dateFilter };
+    const totalCallsQuery = { ...dateFilter };
+
+    const totalLeads = await Lead.countDocuments(totalLeadsQuery);
+    const closedLeads = await Lead.countDocuments(closedLeadsQuery);
+    const lostLeads = await Lead.countDocuments(lostLeadsQuery);
     const activeLeads = totalLeads - closedLeads - lostLeads;
-    const totalCalls = await Call.countDocuments();
+    const totalCalls = await Call.countDocuments(totalCallsQuery);
     const agents = await User.find({ role: 'sdr' }).select('name callsMade leadsAssigned revenueClosed');
 
     // Agent performance summary
     const agentPerformance = await Promise.all(
       agents.map(async (agent) => {
-        const leadsAdded = await Lead.countDocuments({ addedBy: agent.name });
-        const callsMade = await Call.countDocuments({ agentName: agent.name });
-        const leadsClosed = await Lead.countDocuments({ closedBy: agent.name });
-        const leadsAssigned = await Lead.countDocuments({ assignedAgent: agent.name });
+        const leadsAdded = await Lead.countDocuments({ addedBy: agent.name, ...dateFilter });
+        const callsMade = await Call.countDocuments({ agentName: agent.name, ...dateFilter });
+        const leadsClosed = await Lead.countDocuments({ closedBy: agent.name, ...dateFilter });
+        const leadsAssigned = await Lead.countDocuments({ assignedAgent: agent.name, ...dateFilter });
         return {
           id: agent._id.toString(),
           name: agent.name,
@@ -88,7 +110,7 @@ router.get('/leads', auth, hrAccess, async (req: AuthRequest, res: Response) => 
     const leadsWithCallAgents = await Promise.all(
       leads.map(async (lead) => {
         const calls = await Call.find({ leadId: lead._id.toString() }).select('agentName date duration status');
-        const callAgents = [...new Set(calls.map(c => c.agentName))];
+        const callAgents = Array.from(new Set(calls.map(c => c.agentName)));
         const leadObj = lead.toJSON();
         return {
           ...leadObj,
@@ -137,7 +159,7 @@ router.get('/closed-leads', auth, hrAccess, async (req: AuthRequest, res: Respon
     const leadsWithDetails = await Promise.all(
       leads.map(async (lead) => {
         const calls = await Call.find({ leadId: lead._id.toString() }).select('agentName date duration status notes');
-        const callAgents = [...new Set(calls.map(c => c.agentName))];
+        const callAgents = Array.from(new Set(calls.map(c => c.agentName)));
         const leadObj = lead.toJSON();
         return {
           ...leadObj,

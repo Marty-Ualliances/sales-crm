@@ -28,3 +28,14 @@ export function useCreateCall() {
         },
     });
 }
+
+export function useUpdateCall() {
+    const qc = useQueryClient();
+    return useMutation({
+        mutationFn: ({ id, data }: { id: string; data: any }) => api.calls.update(id, data),
+        onSuccess: () => {
+            qc.invalidateQueries({ queryKey: ['calls'] });
+            qc.invalidateQueries({ queryKey: ['call'] });
+        },
+    });
+}

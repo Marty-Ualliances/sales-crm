@@ -24,7 +24,7 @@ const NotificationSchema = new Schema<INotification>(
 );
 
 NotificationSchema.set('toJSON', {
-  transform: (_doc, ret) => {
+  transform: (_doc, ret: any) => {
     ret.id = ret._id.toString();
     if (ret.timestamp) ret.timestamp = ret.timestamp.toISOString().split('T')[0];
     delete ret.__v;

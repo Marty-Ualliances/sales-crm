@@ -16,6 +16,8 @@ export interface IMeeting extends Document {
     confirmationSent: boolean;
     nextStep: string;
     outcome: string;
+    ams?: string;
+    driveLink?: string;
 }
 
 const MeetingSchema = new Schema<IMeeting>(
@@ -35,6 +37,8 @@ const MeetingSchema = new Schema<IMeeting>(
         confirmationSent: { type: Boolean, default: false },
         nextStep: { type: String, default: '' },
         outcome: { type: String, default: '' },
+        ams: { type: String, default: '' },
+        driveLink: { type: String, default: '' },
     },
     { timestamps: true }
 );

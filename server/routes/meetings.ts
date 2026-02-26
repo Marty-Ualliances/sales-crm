@@ -71,7 +71,7 @@ router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
       return res.status(403).json({ error: 'Not authorized' });
     }
 
-    const allowed = ['title', 'description', 'date', 'time', 'duration', 'leadId', 'leadName', 'attendees', 'status', 'agenda', 'confirmationSent', 'nextStep', 'outcome'];
+    const allowed = ['title', 'description', 'date', 'time', 'duration', 'leadId', 'leadName', 'attendees', 'status', 'agenda', 'confirmationSent', 'nextStep', 'outcome', 'ams', 'driveLink'];
     for (const key of allowed) {
       if (req.body[key] !== undefined) {
         if (key === 'date') {

@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { useCalls } from '@/hooks/useApi';
+import { useCalls, useUpdateCall } from '@/hooks/useApi';
 import { toast } from 'sonner';
 
 const statusColors: Record<string, string> = {
@@ -31,6 +31,7 @@ const getAvatarColor = (name: string) =>
 
 export default function CallsPage() {
   const { data: calls = [], isLoading } = useCalls();
+  const updateCall = useUpdateCall();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
@@ -58,8 +59,12 @@ export default function CallsPage() {
   };
 
   const handleSaveEdit = async () => {
+    if (!selectedCall) return;
     try {
-      // TODO: Implement actual API call to update call
+      await updateCall.mutateAsync({
+        id: selectedCall.id,
+        data: editForm
+      });
       toast.success('Call updated successfully');
       setEditDialogOpen(false);
       setSelectedCall(null);
@@ -240,10 +245,11 @@ export default function CallsPage() {
             </div>
           </div>
           <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
+            <Button variant="outline" onClick={() => setEditDialogOpen(false)} disabled={updateCall.isPending}>
               Cancel
             </Button>
-            <Button onClick={handleSaveEdit}>
+            <Button onClick={handleSaveEdit} disabled={updateCall.isPending}>
+              {updateCall.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
               Save Changes
             </Button>
           </div>
