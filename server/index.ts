@@ -32,7 +32,7 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
 const app = express();
 const httpServer = http.createServer(app);
 const isProduction = process.env.NODE_ENV === 'production';
-const PORT = isProduction ? 8080 : (process.env.API_PORT || 3001);
+const PORT = 3001;
 console.log(`[BOOT] PORT=${PORT}, NODE_ENV=${process.env.NODE_ENV}, isProduction=${isProduction}`);
 
 // ── Trust Railway's reverse proxy ──

@@ -10,4 +10,4 @@ RUN npm install -g tsx
 ENV NODE_ENV=production
 EXPOSE 3000
 
-CMD ["sh", "-c", "npx tsx server/index.ts & exec npx next start -H 0.0.0.0"]
+CMD ["node", "start-prod.mjs"]
