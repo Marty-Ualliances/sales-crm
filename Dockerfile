@@ -16,12 +16,15 @@ RUN npm ci --omit=dev --legacy-peer-deps
 FROM node:20-slim AS runner
 WORKDIR /app
 
-# Install process manager to run both Next.js and Express
+# Install procps (provides 'ps' command needed by concurrently) and clean up
+RUN apt-get update && apt-get install -y --no-install-recommends procps && rm -rf /var/lib/apt/lists/*
+
+# Install process manager & tsx globally
 RUN npm install -g concurrently tsx
 
 ENV NODE_ENV=production
 
-# Copy production node_modules (has next in dependencies)
+# Copy production node_modules
 COPY --from=deps /app/node_modules ./node_modules
 # Copy built Next.js app
 COPY --from=builder /app/.next ./.next
@@ -35,5 +38,5 @@ COPY --from=builder /app/tsconfig.json ./
 
 EXPOSE 3000 3001
 
-# Run both services: Next.js on 3000, Express API on 3001
-CMD ["concurrently", "--kill-others", "npx next start", "npm run start:server"]
+# Run both services using node_modules/.bin/next directly
+CMD ["concurrently", "--kill-others", "node_modules/.bin/next start -p 3000", "tsx server/index.ts"]
