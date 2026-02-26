@@ -5,10 +5,12 @@ const nextConfig = {
         ignoreBuildErrors: true,
     },
     async rewrites() {
+        // In production Docker, Express runs on 8080. Locally, 3001.
+        const apiPort = process.env.NODE_ENV === 'production' ? 8080 : 3001;
         return [
             {
                 source: '/api/:path*',
-                destination: 'http://localhost:3001/api/:path*',
+                destination: `http://localhost:${apiPort}/api/:path*`,
             },
         ];
     },

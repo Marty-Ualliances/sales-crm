@@ -31,6 +31,7 @@ export async function request<T>(
         if (res.status === 401) {
             localStorage.removeItem('insurelead_token');
             localStorage.removeItem('insurelead_user');
+            document.cookie = 'insurelead_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
             if (window.location.pathname !== '/login') {
                 window.location.href = '/login';
             }
