@@ -5,6 +5,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
+import next from 'next';
 
 import authRoutes from './routes/auth';
 import leadRoutes from './routes/leads';
@@ -29,137 +30,158 @@ if (!JWT_SECRET || JWT_SECRET.length < 32) {
   process.exit(1);
 }
 
-const app = express();
-const httpServer = http.createServer(app);
 const isProduction = process.env.NODE_ENV === 'production';
-const PORT = process.env.INTERNAL_PORT || 3001;
-console.log(`[BOOT] PORT=${PORT}, NODE_ENV=${process.env.NODE_ENV}, isProduction=${isProduction}`);
+const PORT = process.env.PORT || Number(process.env.INTERNAL_PORT) || 3001;
+console.log(`[BOOT] MODE=${isProduction ? 'production' : 'development'}, PORT=${PORT}`);
 
-// ── Trust Railway's reverse proxy ──
-app.set('trust proxy', 1);
+const nextApp = next({ dev: !isProduction });
+const nextHandler = nextApp.getRequestHandler();
 
-// ── Attach Socket.IO ──
-initIO(httpServer);
+nextApp.prepare().then(() => {
+  const app = express();
+  const httpServer = http.createServer(app);
 
-// ── Security middleware ──
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: 'cross-origin' },
-  crossOriginOpenerPolicy: false,
-  contentSecurityPolicy: false,
-}));
+  // ── Trust Railway's reverse proxy ──
+  app.set('trust proxy', 1);
 
-const allowedOriginsString = process.env.ALLOWED_ORIGINS || '';
-const parsedOrigins = allowedOriginsString
-  .split(',')
-  .map(url => url.trim().replace(/\/$/, ''))
-  .filter(url => url.length > 0);
+  // ── Attach Socket.IO ──
+  initIO(httpServer);
 
-const corsOptions = {
-  origin: isProduction
-    ? (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      if (!origin || parsedOrigins.includes(origin)) {
-        callback(null, true);
-      } else {
-        console.error(`CORS BLOCKED Origin: ${origin}`);
-        callback(new Error('Not allowed by CORS'));
+  // ── Security middleware ──
+  app.use(helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginOpenerPolicy: false,
+    contentSecurityPolicy: false, // Disabled for Next.js to inject its own inline scripts freely
+  }));
+
+  const allowedOriginsString = process.env.ALLOWED_ORIGINS || '';
+  const parsedOrigins = allowedOriginsString
+    .split(',')
+    .map(url => url.trim().replace(/\/$/, ''))
+    .filter(url => url.length > 0);
+
+  const corsOptions = {
+    origin: isProduction
+      ? (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
+        if (!origin || parsedOrigins.includes(origin) || origin.includes('railway.app')) {
+          callback(null, true);
+        } else {
+          console.error(`CORS BLOCKED Origin: ${origin}`);
+          callback(new Error('Not allowed by CORS'));
+        }
+      }
+      : true,
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+    allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
+  };
+
+  app.use(cors(corsOptions));
+
+  // Body parsing with size limit
+  app.use(express.json({ limit: '1mb' }));
+  app.use(express.urlencoded({ extended: false, limit: '1mb' }));
+
+  // Prevent NoSQL injection
+  function sanitize(obj: any): any {
+    if (obj === null || typeof obj !== 'object') return obj;
+    if (Array.isArray(obj)) return obj.map(sanitize);
+    const clean: Record<string, any> = {};
+    for (const key of Object.keys(obj)) {
+      if (key.startsWith('$') || key.includes('.')) continue;
+      clean[key] = sanitize(obj[key]);
+    }
+    return clean;
+  }
+  app.use((req: Request, _res: Response, nextMiddleware: NextFunction) => {
+    if (req.body && typeof req.body === 'object') req.body = sanitize(req.body);
+    if (req.params && typeof req.params === 'object') {
+      for (const key of Object.keys(req.params)) {
+        if (typeof req.params[key] === 'string' && req.params[key].startsWith('$')) {
+          req.params[key] = '';
+        }
       }
     }
-    : true,
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
-  allowedHeaders: ['Origin', 'X-Requested-With', 'Content-Type', 'Accept', 'Authorization'],
-};
-
-app.use(cors(corsOptions));
-
-// Body parsing with size limit
-app.use(express.json({ limit: '1mb' }));
-app.use(express.urlencoded({ extended: false, limit: '1mb' }));
-
-// Prevent NoSQL injection
-function sanitize(obj: any): any {
-  if (obj === null || typeof obj !== 'object') return obj;
-  if (Array.isArray(obj)) return obj.map(sanitize);
-  const clean: Record<string, any> = {};
-  for (const key of Object.keys(obj)) {
-    if (key.startsWith('$') || key.includes('.')) continue;
-    clean[key] = sanitize(obj[key]);
-  }
-  return clean;
-}
-app.use((req: Request, _res: Response, next: NextFunction) => {
-  if (req.body && typeof req.body === 'object') req.body = sanitize(req.body);
-  if (req.params && typeof req.params === 'object') {
-    for (const key of Object.keys(req.params)) {
-      if (typeof req.params[key] === 'string' && req.params[key].startsWith('$')) {
-        req.params[key] = '';
-      }
-    }
-  }
-  next();
-});
-
-// Rate limiting
-const apiLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 200,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many requests, please try again later' },
-});
-app.use('/api', apiLimiter);
-
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 20,
-  standardHeaders: true,
-  legacyHeaders: false,
-  message: { error: 'Too many auth attempts, please try again later' },
-});
-app.use('/api/auth', authLimiter);
-
-app.disable('x-powered-by');
-
-// ── Routes ──
-app.use('/api/auth', authRoutes);
-app.use('/api/leads', leadRoutes);
-app.use('/api/calls', callRoutes);
-app.use('/api/agents', agentRoutes);
-app.use('/api/notifications', notificationRoutes);
-app.use('/api/tasks', taskRoutes);
-app.use('/api/hr', hrRoutes);
-app.use('/api/notes', noteRoutes);
-app.use('/api/meetings', meetingRoutes);
-app.use('/api/outreach', outreachRoutes);
-
-// Health check
-app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected' });
-});
-
-// 404 handler
-app.use((_req: Request, res: Response) => {
-  res.status(404).json({ error: 'Not found' });
-});
-
-// Global error handler
-app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
-  console.error('Unhandled error:', err.message);
-  res.status(500).json({ error: isProduction ? 'Internal server error' : err.message });
-});
-
-// ── Connect to MongoDB and start server ──
-mongoose
-  .connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
-  .then(() => {
-    console.log('Connected to MongoDB');
-    httpServer.listen(Number(PORT), '0.0.0.0', () => {
-      console.log(`Server running publicly on port ${PORT}`);
-    });
-  })
-  .catch((err) => {
-    console.error('FATAL MongoDB connection error:', err.message);
-    process.exit(1);
+    nextMiddleware();
   });
 
-export default app;
+  // Rate limiting
+  const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 200,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many requests, please try again later' },
+  });
+  app.use('/api', apiLimiter);
+
+  const authLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: 'Too many auth attempts, please try again later' },
+  });
+  app.use('/api/auth', authLimiter);
+
+  app.disable('x-powered-by');
+
+  // Request logging
+  app.use((req: Request, _res: Response, nextMiddleware: NextFunction) => {
+    if (req.url.startsWith('/api')) {
+      console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    }
+    nextMiddleware();
+  });
+
+  // ── Routes ──
+  app.use('/api/auth', authRoutes);
+  app.use('/api/leads', leadRoutes);
+  app.use('/api/calls', callRoutes);
+  app.use('/api/agents', agentRoutes);
+  app.use('/api/notifications', notificationRoutes);
+  app.use('/api/tasks', taskRoutes);
+  app.use('/api/hr', hrRoutes);
+  app.use('/api/notes', noteRoutes);
+  app.use('/api/meetings', meetingRoutes);
+  app.use('/api/outreach', outreachRoutes);
+
+  // Health check
+  app.get('/api/health', (_req, res) => {
+    res.json({ status: 'ok', db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected' });
+  });
+
+  // API 404 handler
+  app.all('/api/*', (_req: Request, res: Response) => {
+    res.status(404).json({ error: 'API endpoint not found' });
+  });
+
+  // ── Let Next.js Handle Everything Else ──
+  app.all('*', (req: Request, res: Response) => {
+    return nextHandler(req, res);
+  });
+
+  // Global error handler
+  app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
+    console.error('Unhandled error:', err.message);
+    res.status(500).json({ error: isProduction ? 'Internal server error' : err.message });
+  });
+
+  // ── Connect to MongoDB and start server ──
+  mongoose
+    .connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
+    .then(() => {
+      console.log('Connected to MongoDB');
+      httpServer.listen(Number(PORT), '0.0.0.0', () => {
+        console.log(`🚀 Unified Server (Next.js + Express) running publicly on port ${PORT}`);
+      });
+    })
+    .catch((err) => {
+      console.error('FATAL MongoDB connection error:', err.message);
+      process.exit(1);
+    });
+
+}).catch((err: Error) => {
+  console.error('FATAL Next.js prepare failed:', err);
+  process.exit(1);
+});

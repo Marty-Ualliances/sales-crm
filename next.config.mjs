@@ -5,11 +5,13 @@ const nextConfig = {
         ignoreBuildErrors: true,
     },
     async rewrites() {
-        const apiPort = process.env.INTERNAL_PORT || 3001;
+        if (process.env.NODE_ENV === 'production') {
+            return [];
+        }
         return [
             {
                 source: '/api/:path*',
-                destination: `http://localhost:${apiPort}/api/:path*`,
+                destination: 'http://localhost:3001/api/:path*',
             },
         ];
     },
