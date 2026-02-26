@@ -59,6 +59,8 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
   const profileRef = useRef<HTMLDivElement>(null);
   const impersonateRef = useRef<HTMLDivElement>(null);
 
+  const [isAdminImpersonating, setIsAdminImpersonating] = useState(false);
+
   // Close dropdowns on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -80,7 +82,27 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       return;
     }
     setAuthBootstrapped(true);
+
+    if (typeof window !== 'undefined') {
+      setIsAdminImpersonating(!!localStorage.getItem('insurelead_admin_token'));
+    }
   }, [user, router]);
+
+  const handleReturnToAdmin = () => {
+    const adminToken = localStorage.getItem('insurelead_admin_token');
+    const adminUser = localStorage.getItem('insurelead_admin_user');
+
+    if (adminToken && adminUser) {
+      localStorage.setItem('insurelead_token', adminToken);
+      localStorage.setItem('insurelead_user', adminUser);
+      document.cookie = `insurelead_token=${adminToken}; path=/; max-age=604800; samesite=lax`;
+
+      localStorage.removeItem('insurelead_admin_token');
+      localStorage.removeItem('insurelead_admin_user');
+
+      window.location.href = '/admin';
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -92,8 +114,13 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
       const result = await api.auth.impersonate(userId);
       const currentToken = localStorage.getItem('insurelead_token');
       const currentUser = localStorage.getItem('insurelead_user');
-      if (currentToken) localStorage.setItem('insurelead_admin_token', currentToken);
-      if (currentUser) localStorage.setItem('insurelead_admin_user', currentUser);
+
+      // Only set admin token if we aren't already impersonating someone
+      if (!localStorage.getItem('insurelead_admin_token')) {
+        if (currentToken) localStorage.setItem('insurelead_admin_token', currentToken);
+        if (currentUser) localStorage.setItem('insurelead_admin_user', currentUser);
+      }
+
       localStorage.setItem('insurelead_token', result.token);
       localStorage.setItem('insurelead_user', JSON.stringify(result.user));
       document.cookie = `insurelead_token=${result.token}; path=/; max-age=604800; samesite=lax`;
@@ -185,6 +212,15 @@ export default function AdminLayout({ children }: { children: ReactNode }) {
           </button>
           <div className="hidden lg:block" />
           <div className="flex items-center gap-3">
+            {isAdminImpersonating && (
+              <button
+                onClick={handleReturnToAdmin}
+                className="hidden sm:flex items-center gap-2 rounded-lg px-3 py-1.5 border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary transition-colors text-sm font-medium mr-2"
+              >
+                <Users className="h-4 w-4" />
+                Return to Admin
+              </button>
+            )}
             <NotificationDropdown notifications={notifications} unreadCount={unreadCount} />
 
             {/* Impersonate Dropdown */}
