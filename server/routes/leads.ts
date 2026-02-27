@@ -44,7 +44,7 @@ const CSV_FIELD_MAP: Record<string, string> = {
   'other phone': 'otherPhone',
   'company phone': 'companyPhone',
   // Numbers
-  'employees': 'employees', '# employees': 'employees', 'number of employees': 'employees', 'num employees': 'employees', 'employee count': 'employees', 'company size': 'employees',
+  'employees': 'employeeCount', '# employees': 'employeeCount', 'number of employees': 'employeeCount', 'num employees': 'employeeCount', 'employee count': 'employeeCount', 'company size': 'employeeCount',
   // URLs
   'person linkedin url': 'personLinkedinUrl', 'linkedin': 'personLinkedinUrl', 'linkedin url': 'personLinkedinUrl', 'linkedin profile': 'personLinkedinUrl',
   'website': 'website', 'company website': 'website', 'url': 'website', 'web': 'website',
@@ -140,12 +140,12 @@ router.get('/kpis', auth, async (req: AuthRequest, res: Response) => {
     const totalCalls = leads.reduce((sum, l) => sum + l.callCount, 0);
     const sevenDaysAgo = new Date(today.getTime() - 7 * 86400000);
     const recentActivity = leads.filter(l => l.lastActivity >= sevenDaysAgo).length;
-    const followUpsRemaining = leads.filter(l => l.nextFollowUp && l.status !== 'Closed Won' && l.status !== 'Closed Lost').length;
-    const overdueFollowUps = leads.filter(l => l.nextFollowUp && l.nextFollowUp < today && l.status !== 'Closed Won' && l.status !== 'Closed Lost').length;
-    const closedCount = leads.filter(l => l.status === 'Closed Won').length;
+    const followUpsRemaining = leads.filter(l => l.nextFollowUp && l.status !== 'Active Account').length;
+    const overdueFollowUps = leads.filter(l => l.nextFollowUp && l.nextFollowUp < today && l.status !== 'Active Account').length;
+    const closedCount = leads.filter(l => l.status === 'Active Account').length;
     const conversionRate = totalLeads > 0 ? Math.round((closedCount / totalLeads) * 100) : 0;
     const totalRevenue = leads.reduce((sum, l) => sum + (l.revenue || 0), 0);
-    const appointmentsBooked = leads.filter(l => l.status === 'Meeting Booked' || l.status === 'Meeting Completed').length;
+    const appointmentsBooked = leads.filter(l => l.status === 'Appointment Set').length;
 
     res.json({
       totalLeads,
@@ -259,7 +259,7 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
     const VALID_FIELDS = [
       'date', 'source', 'name', 'title', 'companyName', 'email', 'workDirectPhone',
       'homePhone', 'mobilePhone', 'corporatePhone', 'otherPhone', 'companyPhone',
-      'employees', 'personLinkedinUrl', 'website', 'companyLinkedinUrl', 'address',
+      'employeeCount', 'personLinkedinUrl', 'website', 'companyLinkedinUrl', 'address',
       'city', 'state', 'status', 'assignedAgent', 'notes', 'nextFollowUp',
       'priority', 'segment', 'sourceChannel'
     ];
@@ -297,7 +297,7 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
         else if (cleanKey.includes('address') || cleanKey.includes('street')) mappedField = 'address';
         else if (cleanKey.includes('city')) mappedField = 'city';
         else if (cleanKey.includes('state') || cleanKey.includes('province')) mappedField = 'state';
-        else if (cleanKey.includes('employee') || cleanKey.includes('size')) mappedField = 'employees';
+        else if (cleanKey.includes('employee') || cleanKey.includes('size')) mappedField = 'employeeCount';
         else if (cleanKey.includes('note') || cleanKey.includes('comment')) mappedField = 'notes';
         else if (cleanKey.includes('status') || cleanKey.includes('stage')) mappedField = 'status';
         else if (cleanKey.includes('agent') || cleanKey.includes('owner') || cleanKey.includes('rep') || cleanKey.includes('assign')) mappedField = 'assignedAgent';
@@ -343,7 +343,7 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
           const v = String(value).trim();
           if (!v) continue;
 
-          if (field === 'employees') {
+          if (field === 'employeeCount') {
             const num = parseInt(v.replace(/[^0-9]/g, ''), 10);
             if (!isNaN(num)) doc[field] = num;
           } else if (field === 'nextFollowUp' || field === 'date') {
@@ -464,7 +464,7 @@ router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
     const oldLead = await Lead.findById(req.params.id);
 
     // Track who closed the lead
-    if (req.body.status === 'Closed Won' && oldLead && oldLead.status !== 'Closed Won') {
+    if (req.body.status === 'Active Account' && oldLead && oldLead.status !== 'Active Account') {
       const User = (await import('../models/User')).default;
       const currentUser = await User.findById(req.user!.id);
       req.body.closedBy = currentUser?.name || 'Unknown';

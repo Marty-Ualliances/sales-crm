@@ -1,9 +1,7 @@
 import { z } from 'zod';
 
 export const LeadStatusSchema = z.enum([
-    'New Lead', 'Working', 'Connected', 'Qualified', 'Meeting Booked',
-    'Meeting Completed', 'Proposal Sent', 'Negotiation', 'Closed Won',
-    'Closed Lost', 'Nurture',
+    'New Lead', 'In Progress', 'Contacted', 'Appointment Set', 'Active Account'
 ]);
 
 export const LeadSourceSchema = z.enum([
@@ -48,6 +46,22 @@ export const CadenceSchema = z.object({
     touches: z.array(CadenceTouchSchema),
 });
 
+export const EmployeePhoneSchema = z.object({
+    type: z.enum(['office', 'direct', 'home', 'corporate', 'company']),
+    number: z.string(),
+    extension: z.string().optional(),
+});
+
+export const EmployeeSchema = z.object({
+    id: z.string().optional(),
+    name: z.string(),
+    email: z.string().default(''),
+    linkedin: z.string().optional(),
+    phones: z.array(EmployeePhoneSchema).default([]),
+    isDecisionMaker: z.boolean().default(false),
+    leftOrganization: z.boolean().default(false),
+});
+
 export const LeadSchema = z.object({
     id: z.string(),
     date: z.string(),
@@ -62,7 +76,8 @@ export const LeadSchema = z.object({
     corporatePhone: z.string().default(''),
     otherPhone: z.string().default(''),
     companyPhone: z.string().default(''),
-    employees: z.number().nullable().default(null),
+    employeeCount: z.number().nullable().default(null),
+    employees: z.array(EmployeeSchema).default([]),
     personLinkedinUrl: z.string().default(''),
     website: z.string().default(''),
     companyLinkedinUrl: z.string().default(''),
@@ -71,6 +86,9 @@ export const LeadSchema = z.object({
     state: z.string().default(''),
     status: LeadStatusSchema.catch('New Lead'),
     assignedAgent: z.string().default(''),
+    assignedVA: z.string().optional(),
+    activeServiceDate: z.string().nullable().optional(),
+    contractSignDate: z.string().nullable().optional(),
     addedBy: z.string().default(''),
     closedBy: z.string().default(''),
     closedAt: z.string().nullable().default(null),

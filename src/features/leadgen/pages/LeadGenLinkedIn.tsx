@@ -112,7 +112,7 @@ export default function LeadGenLinkedIn() {
                       { label: 'Phone', value: lead.phone || lead.workDirectPhone },
                       { label: 'City', value: lead.city },
                       { label: 'State', value: lead.state },
-                      { label: 'Employees', value: lead.employees },
+                      { label: 'Employees', value: lead.employeeCount },
                       { label: 'Status', value: lead.status },
                       { label: 'Assigned to', value: lead.assignedAgent || 'Unassigned' },
                       { label: 'Source', value: lead.source },

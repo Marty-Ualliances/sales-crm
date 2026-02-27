@@ -3,18 +3,16 @@ import { useRouter } from 'next/navigation';
 import { AlertTriangle, CalendarCheck, UserPlus, Loader2, BarChart2, Coffee, Phone, CheckCircle } from 'lucide-react';
 import KPICard from '@/components/common/KPICard';
 import RecentActivityFeed from '@/components/common/RecentActivityFeed';
-import { useLeads, useAgents, useKPIs, useFunnel, useCalls } from '@/hooks/useApi';
+import { useLeads, useAgents, useKPIs, useCalls } from '@/hooks/useApi';
 import { Badge } from '@/components/ui/badge';
 import { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
-import { PIPELINE_STAGES, getStageBadgeClass } from '@/features/leads/constants/pipeline';
 import DateFilter, { DateRange, filterByDateRange } from '@/components/common/DateFilter';
 
 export default function AdminDashboard() {
   const { data: leads = [], isLoading: leadsLoading } = useLeads();
   const { data: agents = [], isLoading: agentsLoading } = useAgents();
   const { data: kpis, isLoading: kpisLoading } = useKPIs();
-  const { data: funnel } = useFunnel();
   const { data: allCalls = [] } = useCalls();
   const router = useRouter();
 
@@ -119,10 +117,10 @@ export default function AdminDashboard() {
           <KPICard title="Contacted" value={filteredLeads.filter((l: any) => l.status === 'Contacted').length} icon={Phone} link="/admin/leads" />
         </div>
         <div className="animate-slide-up stagger-4">
-          <KPICard title="Under Contract" value={filteredLeads.filter((l: any) => l.status === 'Qualified').length} icon={CheckCircle} link="/admin/leads" />
+          <KPICard title="Appointment Setter" value={filteredLeads.filter((l: any) => l.status === 'Meeting Booked').length} icon={CheckCircle} link="/admin/leads" />
         </div>
         <div className="animate-slide-up stagger-5">
-          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Closed Won').length} icon={BarChart2} link="/admin/leads" />
+          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Closed Won').length} icon={BarChart2} link="/admin/active-accounts" />
         </div>
       </div>
 
@@ -147,28 +145,6 @@ export default function AdminDashboard() {
           Funnel KPIs
         </button>
       </div>
-
-      {/* Funnel snapshot */}
-      {funnel?.stages && (
-        <div className="rounded-xl border border-border bg-card p-5 shadow-card overflow-hidden">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-base font-semibold text-foreground">Pipeline Snapshot</h2>
-            <button onClick={() => router.push('/admin/funnel')} className="text-xs text-primary hover:underline font-medium">
-              Full Funnel →
-            </button>
-          </div>
-          <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-3">
-            {(funnel.stages as any[]).filter((s: any) => s.count > 0).slice(0, 6).map((s: any) => (
-              <div key={s.stage} className="flex flex-col items-center gap-1.5 rounded-xl bg-gradient-to-br from-secondary/50 to-secondary/20 p-3 text-center hover:from-secondary/70 hover:to-secondary/30 transition-all duration-200">
-                <span className={`inline-flex items-center rounded-full border px-1.5 py-0.5 text-xs font-medium ${getStageBadgeClass(s.stage)}`}>
-                  {s.label}
-                </span>
-                <span className="text-2xl font-bold text-foreground tracking-tight">{s.count}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Team Overview */}
       <div>

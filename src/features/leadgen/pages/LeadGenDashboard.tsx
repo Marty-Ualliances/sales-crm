@@ -54,7 +54,7 @@ export default function LeadGenDashboard() {
           <Button asChild variant="outline">
             <Link href="/leadgen/leads">
               <Users className="h-4 w-4 mr-2" />
-              All Leads
+              Database
             </Link>
           </Button>
           <Button asChild className="gradient-primary border-0">
@@ -78,7 +78,7 @@ export default function LeadGenDashboard() {
           <KPICard title="Contacted" value={filteredLeads.filter((l: any) => l.status === 'Contacted').length} icon={UserCheck} link="/leadgen/leads" />
         </div>
         <div className="animate-slide-up stagger-4">
-          <KPICard title="Under Contract" value={filteredLeads.filter((l: any) => l.status === 'Qualified').length} icon={UserCheck} link="/leadgen/leads" />
+          <KPICard title="Appointment Setter" value={filteredLeads.filter((l: any) => l.status === 'Meeting Booked').length} icon={UserCheck} link="/leadgen/leads" />
         </div>
         <div className="animate-slide-up stagger-5">
           <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Closed Won').length} icon={UserCheck} link="/leadgen/leads" />

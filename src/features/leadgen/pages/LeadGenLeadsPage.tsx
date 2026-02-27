@@ -177,7 +177,7 @@ export default function LeadGenLeadsPage() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">All Leads</h1>
+          <h1 className="text-2xl font-bold text-foreground">Database</h1>
           <p className="text-sm text-muted-foreground mt-1">{leads.length} total leads</p>
         </div>
       </div>

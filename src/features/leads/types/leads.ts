@@ -1,4 +1,4 @@
-export type LeadStatus = 'New Lead' | 'Working' | 'Connected' | 'Qualified' | 'Meeting Booked' | 'Meeting Completed' | 'Proposal Sent' | 'Negotiation' | 'Closed Won' | 'Closed Lost' | 'Nurture';
+export type LeadStatus = 'New Lead' | 'In Progress' | 'Contacted' | 'Appointment Set' | 'Active Account';
 
 export type LeadSource = 'CSV Import' | 'Manual' | 'Website' | 'Referral' | 'LinkedIn' | 'Cold – High Fit' | 'Warm – Engaged' | 'Cold – Quick Sourced' | 'Cold – Bulk Data' | 'Other';
 
@@ -48,7 +48,8 @@ export interface Lead {
   otherPhone: string;
   companyPhone: string;
   // Company info
-  employees: number | null;
+  employeeCount: number | null;
+  employees: Employee[];
   personLinkedinUrl: string;
   website: string;
   companyLinkedinUrl: string;
@@ -58,6 +59,9 @@ export interface Lead {
   // CRM fields
   status: LeadStatus;
   assignedAgent: string;
+  assignedVA?: string;
+  activeServiceDate?: string | null;
+  contractSignDate?: string | null;
   addedBy: string;
   closedBy: string;
   closedAt: string | null;
@@ -123,4 +127,20 @@ export interface Notification {
   timestamp: string;
   read: boolean;
   leadId?: string;
+}
+
+export interface EmployeePhone {
+  type: 'office' | 'direct' | 'home' | 'corporate' | 'company';
+  number: string;
+  extension?: string;
+}
+
+export interface Employee {
+  id?: string;
+  name: string;
+  email: string;
+  linkedin?: string;
+  phones: EmployeePhone[];
+  isDecisionMaker: boolean;
+  leftOrganization: boolean;
 }

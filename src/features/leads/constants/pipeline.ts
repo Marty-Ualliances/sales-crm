@@ -5,16 +5,10 @@
 
 export const PIPELINE_STAGES = [
     { key: 'New Lead', label: 'New Lead', color: 'bg-slate-400', textColor: 'text-slate-700', badgeClass: 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-900 dark:text-slate-300' },
-    { key: 'Working', label: 'Working', color: 'bg-blue-400', textColor: 'text-blue-700', badgeClass: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900 dark:text-blue-300' },
-    { key: 'Connected', label: 'Connected', color: 'bg-cyan-400', textColor: 'text-cyan-700', badgeClass: 'bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-900 dark:text-cyan-300' },
-    { key: 'Qualified', label: 'Qualified', color: 'bg-violet-400', textColor: 'text-violet-700', badgeClass: 'bg-violet-100 text-violet-700 border-violet-200 dark:bg-violet-900 dark:text-violet-300' },
-    { key: 'Meeting Booked', label: 'Meeting Booked', color: 'bg-amber-400', textColor: 'text-amber-700', badgeClass: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900 dark:text-amber-300' },
-    { key: 'Meeting Completed', label: 'Meeting Completed', color: 'bg-indigo-400', textColor: 'text-indigo-700', badgeClass: 'bg-indigo-100 text-indigo-700 border-indigo-200 dark:bg-indigo-900 dark:text-indigo-300' },
-    { key: 'Proposal Sent', label: 'Proposal Sent', color: 'bg-orange-400', textColor: 'text-orange-700', badgeClass: 'bg-orange-100 text-orange-700 border-orange-200 dark:bg-orange-900 dark:text-orange-300' },
-    { key: 'Negotiation', label: 'Negotiation', color: 'bg-pink-400', textColor: 'text-pink-700', badgeClass: 'bg-pink-100 text-pink-700 border-pink-200 dark:bg-pink-900 dark:text-pink-300' },
-    { key: 'Closed Won', label: 'Closed Won', color: 'bg-emerald-500', textColor: 'text-emerald-700', badgeClass: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900 dark:text-emerald-300' },
-    { key: 'Closed Lost', label: 'Closed Lost', color: 'bg-red-400', textColor: 'text-red-700', badgeClass: 'bg-red-100 text-red-700 border-red-200 dark:bg-red-900 dark:text-red-300' },
-    { key: 'Nurture', label: 'Nurture', color: 'bg-teal-400', textColor: 'text-teal-700', badgeClass: 'bg-teal-100 text-teal-700 border-teal-200 dark:bg-teal-900 dark:text-teal-300' },
+    { key: 'In Progress', label: 'In Progress', color: 'bg-blue-400', textColor: 'text-blue-700', badgeClass: 'bg-blue-100 text-blue-700 border-blue-200 dark:bg-blue-900 dark:text-blue-300' },
+    { key: 'Contacted', label: 'Contacted', color: 'bg-cyan-400', textColor: 'text-cyan-700', badgeClass: 'bg-cyan-100 text-cyan-700 border-cyan-200 dark:bg-cyan-900 dark:text-cyan-300' },
+    { key: 'Appointment Set', label: 'Appointment Set', color: 'bg-amber-400', textColor: 'text-amber-700', badgeClass: 'bg-amber-100 text-amber-700 border-amber-200 dark:bg-amber-900 dark:text-amber-300' },
+    { key: 'Active Account', label: 'Active Account', color: 'bg-emerald-500', textColor: 'text-emerald-700', badgeClass: 'bg-emerald-100 text-emerald-700 border-emerald-200 dark:bg-emerald-900 dark:text-emerald-300' },
 ] as const;
 
 /** All valid pipeline stage keys */
@@ -29,13 +23,13 @@ export const getStageBadgeClass = (key: string) => getStage(key)?.badgeClass ?? 
 export const getStageColor = (key: string) => getStage(key)?.color ?? 'bg-gray-400';
 
 /** Terminal stages (no further action expected) */
-export const TERMINAL_STAGES: PipelineStageKey[] = ['Closed Won', 'Closed Lost', 'Nurture'];
+export const TERMINAL_STAGES: PipelineStageKey[] = ['Active Account'];
 
 /** Stages where meetings are relevant */
-export const MEETING_STAGES: PipelineStageKey[] = ['Meeting Booked', 'Meeting Completed'];
+export const MEETING_STAGES: PipelineStageKey[] = ['Appointment Set'];
 
 /** Stages that trigger auto-recording flag on calls */
-export const RECORDING_FLAG_STAGES: PipelineStageKey[] = ['Meeting Completed', 'Negotiation', 'Closed Won'];
+export const RECORDING_FLAG_STAGES: PipelineStageKey[] = ['Active Account'];
 
 /* ── Lead Priorities (§6) ── */
 export const PRIORITIES = [

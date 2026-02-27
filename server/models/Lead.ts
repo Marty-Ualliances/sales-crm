@@ -36,6 +36,21 @@ export interface ICadence {
   touches: ICadenceTouch[];
 }
 
+export interface IEmployeePhone {
+  type: 'office' | 'direct' | 'home' | 'corporate' | 'company';
+  number: string;
+  extension?: string;
+}
+
+export interface IEmployee {
+  name: string;
+  email: string;
+  phones: IEmployeePhone[];
+  linkedin: string;
+  isDecisionMaker: boolean;
+  leftOrganization: boolean;
+}
+
 export interface ILead extends Document {
   date: Date;
   source: string;
@@ -49,7 +64,8 @@ export interface ILead extends Document {
   corporatePhone: string;
   otherPhone: string;
   companyPhone: string;
-  employees: number | null;
+  employeeCount: number | null;
+  employees: IEmployee[];
   personLinkedinUrl: string;
   website: string;
   companyLinkedinUrl: string;
@@ -58,6 +74,9 @@ export interface ILead extends Document {
   state: string;
   status: PipelineStageKey;
   assignedAgent: string;
+  assignedVA: string;
+  activeServiceDate: Date | null;
+  contractSignDate: Date | null;
   addedBy: string;
   closedBy: string;
   closedAt: Date | null;
@@ -98,6 +117,27 @@ const ActivitySchema = new Schema<IActivity>(
   { _id: true }
 );
 
+const EmployeePhoneSchema = new Schema<IEmployeePhone>(
+  {
+    type: { type: String, enum: ['office', 'direct', 'home', 'corporate', 'company'], required: true },
+    number: { type: String, required: true },
+    extension: { type: String, default: '' },
+  },
+  { _id: false }
+);
+
+const EmployeeSchema = new Schema<IEmployee>(
+  {
+    name: { type: String, required: true, default: '' },
+    email: { type: String, default: '' },
+    phones: { type: [EmployeePhoneSchema], default: [] },
+    linkedin: { type: String, default: '' },
+    isDecisionMaker: { type: Boolean, default: false },
+    leftOrganization: { type: Boolean, default: false },
+  },
+  { _id: true }
+);
+
 const LeadSchema = new Schema<ILead>(
   {
     date: { type: Date, default: Date.now },
@@ -112,7 +152,8 @@ const LeadSchema = new Schema<ILead>(
     corporatePhone: { type: String, default: '' },
     otherPhone: { type: String, default: '' },
     companyPhone: { type: String, default: '' },
-    employees: { type: Number, default: null },
+    employeeCount: { type: Number, default: null },
+    employees: { type: [EmployeeSchema], default: [] },
     personLinkedinUrl: { type: String, default: '' },
     website: { type: String, default: '' },
     companyLinkedinUrl: { type: String, default: '' },
@@ -121,6 +162,9 @@ const LeadSchema = new Schema<ILead>(
     state: { type: String, default: '' },
     status: { type: String, enum: [...PIPELINE_STAGES], default: 'New Lead' },
     assignedAgent: { type: String, required: true },
+    assignedVA: { type: String, default: '' },
+    activeServiceDate: { type: Date, default: null },
+    contractSignDate: { type: Date, default: null },
     addedBy: { type: String, default: '' },
     closedBy: { type: String, default: '' },
     closedAt: { type: Date, default: null },
@@ -176,6 +220,8 @@ LeadSchema.set('toJSON', {
     if (ret.nextFollowUp) ret.nextFollowUp = ret.nextFollowUp.toISOString().split('T')[0];
     if (ret.lastActivity) ret.lastActivity = ret.lastActivity.toISOString().split('T')[0];
     if (ret.closedAt) ret.closedAt = ret.closedAt.toISOString().split('T')[0];
+    if (ret.activeServiceDate) ret.activeServiceDate = ret.activeServiceDate.toISOString().split('T')[0];
+    if (ret.contractSignDate) ret.contractSignDate = ret.contractSignDate.toISOString().split('T')[0];
     delete ret.__v;
     return ret;
   },

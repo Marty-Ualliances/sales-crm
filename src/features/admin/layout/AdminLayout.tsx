@@ -30,7 +30,7 @@ const adminNavItems = [
   { icon: Home, label: 'Dashboard', path: '/admin' },
   { icon: Coffee, label: 'Daily Huddle', path: '/admin/huddle' },
   { icon: BarChart2, label: 'Funnel KPIs', path: '/admin/funnel' },
-  { icon: Users, label: 'All Leads', path: '/admin/leads' },
+  { icon: Users, label: 'Database', path: '/admin/leads' },
   { icon: Phone, label: 'All Calls', path: '/admin/calls' },
   { icon: Clock, label: 'Follow-ups', path: '/admin/follow-ups' },
   { icon: Layers, label: 'Pipeline', path: '/admin/pipeline' },

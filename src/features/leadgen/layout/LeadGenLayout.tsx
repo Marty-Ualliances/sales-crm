@@ -12,7 +12,7 @@ import { useSocket } from '@/hooks/useSocket';
 
 const leadGenNavItems = [
   { icon: Home, label: 'Dashboard', path: '/leadgen' },
-  { icon: Users, label: 'All Leads', path: '/leadgen/leads' },
+  { icon: Users, label: 'Database', path: '/leadgen/leads' },
   { icon: FileSpreadsheet, label: 'CSV Upload', path: '/leadgen/upload' },
   { icon: Mail, label: 'Email Outreach', path: '/leadgen/email' },
   { icon: Linkedin, label: 'LinkedIn Outreach', path: '/leadgen/linkedin' },

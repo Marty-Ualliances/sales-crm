@@ -47,7 +47,7 @@ export default function HRDashboard() {
           <KPICard title="Contacted" value={data?.totalCalls ?? 0} icon={PhoneCall} link="/hr/leads" />
         </div>
         <div className="animate-slide-up stagger-4">
-          <KPICard title="Under Contract" value={0} icon={CheckCircle2} link="/hr/leads" />
+          <KPICard title="Appointment Setter" value={0} icon={CheckCircle2} link="/hr/leads" />
         </div>
         <div className="animate-slide-up stagger-5">
           <KPICard title="Active Accounts" value={data?.closedLeads ?? 0} icon={BarChart3} link="/hr/closed-leads" />
@@ -62,7 +62,7 @@ export default function HRDashboard() {
             onClick={() => router.push('/hr/leads')}
             className="text-sm text-primary hover:underline font-medium"
           >
-            View all leads →
+            View database →
           </button>
         </div>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 auto-rows-fr">

@@ -109,10 +109,10 @@ export default function SDRDashboard() {
           <KPICard title="Contacted" value={filteredLeads.filter((l: any) => l.status === 'Contacted').length} icon={Phone} link="/sdr/leads" />
         </div>
         <div className="animate-slide-up stagger-4">
-          <KPICard title="Under Contract" value={filteredLeads.filter((l: any) => l.status === 'Qualified').length} icon={CheckCircle} link="/sdr/leads" />
+          <KPICard title="Appointment Setter" value={filteredLeads.filter((l: any) => l.status === 'Meeting Booked').length} icon={CheckCircle} link="/sdr/leads" />
         </div>
         <div className="animate-slide-up stagger-5">
-          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Closed Won').length} icon={Target} link="/sdr/leads" />
+          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Closed Won').length} icon={Target} link="/sdr/active-accounts" />
         </div>
       </div>
 
