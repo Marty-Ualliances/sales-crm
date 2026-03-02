@@ -38,11 +38,10 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/next.config.* ./
 
-COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server ./server
 
 EXPOSE 3000
 
 USER nextjs
 
-CMD ["sh", "-c", "PORT=3001 node dist/server/index.js & BACK_PID=$!; npx next start -p 3000 & FRONT_PID=$!; trap 'kill -TERM $BACK_PID $FRONT_PID 2>/dev/null' TERM INT; wait -n $BACK_PID $FRONT_PID; kill -TERM $BACK_PID $FRONT_PID 2>/dev/null; wait"]
+CMD ["sh", "-c", "PORT=3001 npx tsx server/index.ts & BACK_PID=$!; npx next start -p 3000 & FRONT_PID=$!; trap 'kill -TERM $BACK_PID $FRONT_PID 2>/dev/null' TERM INT; wait -n $BACK_PID $FRONT_PID; kill -TERM $BACK_PID $FRONT_PID 2>/dev/null; wait"]
