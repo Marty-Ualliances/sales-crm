@@ -7,7 +7,6 @@ import {
 } from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { useSocket } from '@/hooks/useSocket';
-import { useSocket } from '@/hooks/useSocket';
 import { useRole } from '@/hooks/useRole';
 import { ThemeToggle } from '@/components/common/ThemeToggle';
 
