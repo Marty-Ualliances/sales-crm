@@ -5,9 +5,20 @@ import Lead from './models/Lead';
 import Call from './models/Call';
 import Notification from './models/Notification';
 
-import { env } from './config/env';
+dotenv.config({ override: false });
 
-const MONGODB_URI = env.MONGODB_URI || 'mongodb://localhost:27017/insurelead';
+const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/insurelead';
+
+function requireEnv(name: string): string {
+  const value = process.env[name]?.trim();
+  if (!value) {
+    throw new Error(`Missing required env var: ${name}`);
+  }
+  return value;
+}
+
+const SEED_ADMIN_PASSWORD = requireEnv('SEED_ADMIN_PASSWORD');
+const SEED_TEAM_PASSWORD = requireEnv('SEED_TEAM_PASSWORD');
 
 const today = new Date();
 const ago = (days: number) => new Date(today.getTime() - days * 86400000);
@@ -29,14 +40,17 @@ async function seed() {
 
   // --- Users ---
   const users = await User.create([
-    { name: 'Chiren', email: 'chiren@ualliances.com', password: 'chiren@1100', avatar: 'CH', role: 'admin', leadsAssigned: 45, callsMade: 128, followUpsCompleted: 34, followUpsPending: 8, conversionRate: 24, revenueClosed: 128500 },
-    { name: 'Rajesh Patel', email: 'rajesh@ualliances.com', password: 'Team2026!rp', avatar: 'RP', role: 'sdr', leadsAssigned: 38, callsMade: 96, followUpsCompleted: 28, followUpsPending: 12, conversionRate: 18, revenueClosed: 87200 },
-    { name: 'Priya Sharma', email: 'priya@ualliances.com', password: 'Team2026!ps', avatar: 'PS', role: 'sdr', leadsAssigned: 52, callsMade: 145, followUpsCompleted: 41, followUpsPending: 5, conversionRate: 28, revenueClosed: 156800 },
-    { name: 'Amit Desai', email: 'amit@ualliances.com', password: 'Team2026!ad', avatar: 'AD', role: 'sdr', leadsAssigned: 31, callsMade: 72, followUpsCompleted: 19, followUpsPending: 15, conversionRate: 15, revenueClosed: 54300 },
-    { name: 'Deepa Joshi', email: 'deepa@ualliances.com', password: 'Team2026!dj', avatar: 'DJ', role: 'hr', leadsAssigned: 0, callsMade: 0, followUpsCompleted: 0, followUpsPending: 0, conversionRate: 0, revenueClosed: 0 },
-    { name: 'Karan Shah', email: 'karan@ualliances.com', password: 'Team2026!ks', avatar: 'KS', role: 'leadgen', leadsAssigned: 0, callsMade: 0, followUpsCompleted: 0, followUpsPending: 0, conversionRate: 0, revenueClosed: 0 },
+    { name: 'Chiren', email: 'chiren@ualliances.com', password: SEED_ADMIN_PASSWORD, avatar: 'CH', role: 'admin', leadsAssigned: 45, callsMade: 128, followUpsCompleted: 34, followUpsPending: 8, conversionRate: 24, revenueClosed: 128500 },
+    { name: 'Rajesh Patel', email: 'rajesh@ualliances.com', password: SEED_TEAM_PASSWORD, avatar: 'RP', role: 'sdr', leadsAssigned: 38, callsMade: 96, followUpsCompleted: 28, followUpsPending: 12, conversionRate: 18, revenueClosed: 87200 },
+    { name: 'Priya Sharma', email: 'priya@ualliances.com', password: SEED_TEAM_PASSWORD, avatar: 'PS', role: 'sdr', leadsAssigned: 52, callsMade: 145, followUpsCompleted: 41, followUpsPending: 5, conversionRate: 28, revenueClosed: 156800 },
+    { name: 'Amit Desai', email: 'amit@ualliances.com', password: SEED_TEAM_PASSWORD, avatar: 'AD', role: 'sdr', leadsAssigned: 31, callsMade: 72, followUpsCompleted: 19, followUpsPending: 15, conversionRate: 15, revenueClosed: 54300 },
+    { name: 'Deepa Joshi', email: 'deepa@ualliances.com', password: SEED_TEAM_PASSWORD, avatar: 'DJ', role: 'hr', leadsAssigned: 0, callsMade: 0, followUpsCompleted: 0, followUpsPending: 0, conversionRate: 0, revenueClosed: 0 },
+    { name: 'Karan Shah', email: 'karan@ualliances.com', password: SEED_TEAM_PASSWORD, avatar: 'KS', role: 'leadgen', leadsAssigned: 0, callsMade: 0, followUpsCompleted: 0, followUpsPending: 0, conversionRate: 0, revenueClosed: 0 },
   ]);
   console.log(`Created ${users.length} users`);
+  console.log('Seeded login users:');
+  console.log('- Admin: chiren@ualliances.com (SEED_ADMIN_PASSWORD)');
+  console.log('- Team users: rajesh/priya/amit/deepa/karan @ualliances.com (SEED_TEAM_PASSWORD)');
 
   // --- Leads ---
   const leads = await Lead.create([

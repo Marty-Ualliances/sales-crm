@@ -40,14 +40,17 @@ INTERNAL_PORT=3001
 NODE_ENV=development
 APP_URL=http://localhost:3000
 
-MONGODB_URI=mongodb://127.0.0.1:27017/insurelead
-
 JWT_SECRET=your_jwt_secret
 JWT_REFRESH_SECRET=your_refresh_secret
+MONGODB_URI=your_mongodb_uri
+SEED_ADMIN_PASSWORD=your_admin_password
+SEED_TEAM_PASSWORD=your_team_password
 
 RESEND_API_KEY=your_resend_api_key
 SMTP_FROM=noreply@ualliances.com
 ```
+
+For Railway MongoDB, set `MONGODB_URI` to the Railway connection string in the same environment where you run `npm run seed`.
 
 ### Run
 
@@ -60,6 +63,11 @@ Optional seed data:
 ```bash
 npm run seed
 ```
+
+Seed login after `npm run seed`:
+
+- Admin email: `chiren@ualliances.com` + `SEED_ADMIN_PASSWORD`
+- Team emails: `rajesh@ualliances.com`, `priya@ualliances.com`, `amit@ualliances.com`, `deepa@ualliances.com`, `karan@ualliances.com` + `SEED_TEAM_PASSWORD`
 
 ## Useful Scripts
 
