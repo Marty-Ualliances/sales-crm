@@ -1,4 +1,4 @@
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, CookieOptions } from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import User from '../models/User';
@@ -11,6 +11,26 @@ const router = Router();
 import { env } from '../config/env';
 
 const IS_PROD = env.NODE_ENV === 'production';
+
+function getCookieOptions(): { base: CookieOptions; refreshPath: string; backupPath: string } {
+  const configuredSameSite = env.COOKIE_SAMESITE as ('lax' | 'strict' | 'none' | undefined);
+  const sameSite = configuredSameSite || (IS_PROD ? 'none' : 'lax');
+  const secure = IS_PROD || sameSite === 'none';
+  const domain = env.COOKIE_DOMAIN?.trim() || undefined;
+
+  const base: CookieOptions = {
+    httpOnly: true,
+    secure,
+    sameSite,
+    ...(domain ? { domain } : {}),
+  };
+
+  return {
+    base,
+    refreshPath: '/api/auth/refresh',
+    backupPath: '/api/auth/exit-impersonation',
+  };
+}
 
 function getJwtSecret(): string {
   const s = env.JWT_SECRET;
@@ -26,29 +46,25 @@ function getRefreshSecret(): string {
 
 /** Set both httpOnly cookies: access (15 min) + refresh (7 days) */
 function setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
-  const secure = IS_PROD;
-  const sameSite = IS_PROD ? ('strict' as const) : ('lax' as const);
+  const { base, refreshPath } = getCookieOptions();
 
   res.cookie('insurelead_access', accessToken, {
-    httpOnly: true,
-    secure,
-    sameSite,
+    ...base,
     maxAge: 15 * 60 * 1000,          // 15 minutes
     path: '/',
   });
 
   res.cookie('insurelead_refresh', refreshToken, {
-    httpOnly: true,
-    secure,
-    sameSite,
+    ...base,
     maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    path: '/api/auth/refresh',
+    path: refreshPath,
   });
 }
 
 function clearAuthCookies(res: Response) {
-  res.clearCookie('insurelead_access', { path: '/' });
-  res.clearCookie('insurelead_refresh', { path: '/api/auth/refresh' });
+  const { base, refreshPath } = getCookieOptions();
+  res.clearCookie('insurelead_access', { ...base, path: '/' });
+  res.clearCookie('insurelead_refresh', { ...base, path: refreshPath });
 }
 
 const BACKUP_SECRET_SUFFIX = '_admin_backup';
@@ -58,24 +74,22 @@ function getAdminBackupSecret(): string {
 }
 
 function setAdminBackupCookie(res: Response, adminId: string, adminEmail: string) {
-  const secure = IS_PROD;
-  const sameSite = IS_PROD ? ('strict' as const) : ('lax' as const);
+  const { base, backupPath } = getCookieOptions();
   const token = jwt.sign(
     { adminId, adminEmail },
     getAdminBackupSecret(),
     { expiresIn: '2h' },
   );
   res.cookie('insurelead_admin_backup', token, {
-    httpOnly: true,
-    secure,
-    sameSite,
+    ...base,
     maxAge: 2 * 60 * 60 * 1000, // 2 hours
-    path: '/api/auth/exit-impersonation',
+    path: backupPath,
   });
 }
 
 function clearAdminBackupCookie(res: Response) {
-  res.clearCookie('insurelead_admin_backup', { path: '/api/auth/exit-impersonation' });
+  const { base, backupPath } = getCookieOptions();
+  res.clearCookie('insurelead_admin_backup', { ...base, path: backupPath });
 }
 
 function issueTokenPair(payload: { id: string; role: string; email: string; name?: string; tokenVersion?: number; impersonatedBy?: string }) {
@@ -226,16 +240,14 @@ router.post('/impersonate', auth, async (req: AuthRequest, res: Response) => {
     );
 
     // Set only the access cookie, clear any existing refresh cookie
-    const secure = IS_PROD;
-    const sameSite = IS_PROD ? ('strict' as const) : ('lax' as const);
+    const { base } = getCookieOptions();
     res.cookie('insurelead_access', accessToken, {
-      httpOnly: true,
-      secure,
-      sameSite,
+      ...base,
       maxAge: 15 * 60 * 1000,
       path: '/',
     });
-    res.clearCookie('insurelead_refresh', { path: '/api/auth/refresh' });
+    const { refreshPath } = getCookieOptions();
+    res.clearCookie('insurelead_refresh', { ...base, path: refreshPath });
 
     res.json({ user: target.toJSON(), impersonatedBy: req.user.email });
   } catch (err) {

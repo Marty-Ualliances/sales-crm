@@ -24,6 +24,8 @@ const envSchema = z.object({
     SMTP_FROM: z.string().optional(),
     APP_URL: z.string().optional(),
     ALLOWED_ORIGINS: z.string().optional().default(''),
+    COOKIE_DOMAIN: z.string().optional(),
+    COOKIE_SAMESITE: z.enum(['lax', 'strict', 'none']).optional(),
 });
 
 const _env = envSchema.safeParse(process.env);
