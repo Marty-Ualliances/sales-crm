@@ -108,10 +108,17 @@ router.post('/login', async (req: Request, res: Response) => {
 
     const trimmedEmail = String(email).trim().toLowerCase();
     const user = await User.findOne({ email: trimmedEmail });
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!user) {
+      console.warn(`[LOGIN] No user found for email: ${trimmedEmail}`);
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
 
     const isMatch = await user.comparePassword(password);
-    if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
+    if (!isMatch) {
+      console.warn(`[LOGIN] Password mismatch for email: ${trimmedEmail}`);
+      return res.status(401).json({ error: 'Invalid credentials' });
+    }
+    console.log(`[LOGIN] Successful login for: ${trimmedEmail} (role: ${user.role})`);
 
     const { accessToken, refreshToken } = issueTokenPair({
       id: user._id.toString(),
