@@ -8,7 +8,7 @@ RUN apk add --no-cache libc6-compat
 
 FROM base AS deps
 COPY package*.json ./
-RUN npm ci
+RUN npm ci --legacy-peer-deps
 
 FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
@@ -19,7 +19,7 @@ RUN npm run build \
 
 FROM base AS prod-deps
 COPY package*.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+RUN npm ci --omit=dev --legacy-peer-deps && npm cache clean --force
 
 FROM node:20-alpine AS runner
 WORKDIR /app
