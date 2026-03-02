@@ -20,7 +20,7 @@ const hrNavItems = [
 export default function HRLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '';
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, impersonatedBy, exitImpersonation } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   useSocket();
 
@@ -116,6 +116,14 @@ export default function HRLayout({ children }: { children: ReactNode }) {
           </button>
           <div className="hidden lg:block" />
           <div className="flex items-center gap-3">
+            {impersonatedBy && (
+              <button
+                onClick={exitImpersonation}
+                className="rounded-md border border-amber-400/40 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-600 hover:bg-amber-500/20"
+              >
+                Return to Admin Panel
+              </button>
+            )}
             <ThemeToggle />
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 text-white text-sm font-medium ring-2 ring-emerald-500/20">

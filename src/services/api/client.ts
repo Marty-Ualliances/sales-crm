@@ -54,7 +54,7 @@ export async function request<T>(
                 return request<T>(endpoint, options, true);
             } catch {
                 redirectToLogin();
-                throw new Error('Session expired');
+                throw new Error('Unauthorized');
             }
         }
 

@@ -25,7 +25,7 @@ const leadGenNavItems = [
 export default function LeadGenLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '';
   const router = useRouter();
-  const { user, logout } = useAuth();
+  const { user, logout, impersonatedBy, exitImpersonation } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const { data: notifications = [] } = useNotifications();
   const unreadCount = notifications.filter((n: any) => !n.read).length;
@@ -117,6 +117,14 @@ export default function LeadGenLayout({ children }: { children: ReactNode }) {
           </button>
           <div className="hidden lg:block" />
           <div className="flex items-center gap-3">
+            {impersonatedBy && (
+              <button
+                onClick={exitImpersonation}
+                className="rounded-md border border-amber-400/40 bg-amber-500/10 px-3 py-1.5 text-xs font-semibold text-amber-600 hover:bg-amber-500/20"
+              >
+                Return to Admin Panel
+              </button>
+            )}
             <ThemeToggle />
             <NotificationDropdown notifications={notifications} unreadCount={unreadCount} />
             <div className="flex items-center gap-2">
