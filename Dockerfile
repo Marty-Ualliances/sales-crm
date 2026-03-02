@@ -1,42 +1,48 @@
-# ── Stage 1: Build Next.js ──────────────────────────────────────
-FROM node:20-slim AS builder
+# syntax=docker/dockerfile:1.7
 
+FROM node:20-alpine AS base
 WORKDIR /app
+ENV NEXT_TELEMETRY_DISABLED=1
 
-# Install deps first (cache layer)
-COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps
+RUN apk add --no-cache libc6-compat
 
-# Copy source and build
+FROM base AS deps
+COPY package*.json ./
+RUN npm ci
+
+FROM base AS builder
+COPY --from=deps /app/node_modules ./node_modules
 COPY . .
-RUN npm run build
 
-# ── Stage 2: Production runtime ────────────────────────────────
-FROM node:20-slim AS runner
+RUN npm run build \
+ && (npm run build:server || npx tsc -p tsconfig.json)
 
+FROM base AS prod-deps
+COPY package*.json ./
+RUN npm ci --omit=dev && npm cache clean --force
+
+FROM node:20-alpine AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
+ENV NEXT_TELEMETRY_DISABLED=1
 
-# Install production deps only (includes tsx since it's in dependencies)
-COPY package.json package-lock.json ./
-RUN npm ci --legacy-peer-deps --omit=dev
+RUN apk add --no-cache libc6-compat \
+ && addgroup -S nodejs \
+ && adduser -S nextjs -G nodejs
 
-# Copy Next.js build output
+COPY --from=prod-deps /app/node_modules ./node_modules
+COPY --from=prod-deps /app/package*.json ./
+
 COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
+COPY --from=builder /app/next.config.* ./
 
-# Copy server source (tsx runs it directly)
+COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/server ./server
-
-# Copy config files needed at runtime
-COPY --from=builder /app/next.config.mjs ./
-COPY --from=builder /app/next-env.d.ts ./
-COPY --from=builder /app/tsconfig.json ./
-COPY --from=builder /app/tailwind.config.ts ./
-COPY --from=builder /app/postcss.config.js ./
-COPY --from=builder /app/src/index.css ./src/index.css
 
 EXPOSE 3000
 
-CMD ["npx", "tsx", "server/index.ts"]
+USER nextjs
+
+CMD ["sh", "-c", "PORT=3001 node dist/server/index.js & BACK_PID=$!; npx next start -p 3000 & FRONT_PID=$!; trap 'kill -TERM $BACK_PID $FRONT_PID 2>/dev/null' TERM INT; wait -n $BACK_PID $FRONT_PID; kill -TERM $BACK_PID $FRONT_PID 2>/dev/null; wait"]
