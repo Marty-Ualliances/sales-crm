@@ -217,6 +217,37 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
   res.status(500).json({ error: isProduction ? 'Internal server error' : err.message });
 });
 
+// ── Auto-seed admin user if database is empty ──
+import User from './models/User';
+
+async function autoSeedAdmin() {
+  try {
+    const userCount = await User.countDocuments();
+    if (userCount > 0) {
+      console.log(`[SEED] Database already has ${userCount} user(s), skipping auto-seed.`);
+      return;
+    }
+    console.log('[SEED] No users found — creating default admin user…');
+
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'chiren@1100';
+    const teamPassword = process.env.SEED_TEAM_PASSWORD || 'Team2026!';
+
+    await User.create([
+      { name: 'Chiren', email: 'chiren@ualliances.com', password: adminPassword, avatar: 'CH', role: 'admin', leadsAssigned: 0, callsMade: 0, followUpsCompleted: 0, followUpsPending: 0, conversionRate: 0, revenueClosed: 0 },
+      { name: 'Rajesh Patel', email: 'rajesh@ualliances.com', password: teamPassword, avatar: 'RP', role: 'sdr', leadsAssigned: 0, callsMade: 0, followUpsCompleted: 0, followUpsPending: 0, conversionRate: 0, revenueClosed: 0 },
+      { name: 'Priya Sharma', email: 'priya@ualliances.com', password: teamPassword, avatar: 'PS', role: 'sdr', leadsAssigned: 0, callsMade: 0, followUpsCompleted: 0, followUpsPending: 0, conversionRate: 0, revenueClosed: 0 },
+      { name: 'Amit Desai', email: 'amit@ualliances.com', password: teamPassword, avatar: 'AD', role: 'sdr', leadsAssigned: 0, callsMade: 0, followUpsCompleted: 0, followUpsPending: 0, conversionRate: 0, revenueClosed: 0 },
+      { name: 'Deepa Joshi', email: 'deepa@ualliances.com', password: teamPassword, avatar: 'DJ', role: 'hr', leadsAssigned: 0, callsMade: 0, followUpsCompleted: 0, followUpsPending: 0, conversionRate: 0, revenueClosed: 0 },
+      { name: 'Karan Shah', email: 'karan@ualliances.com', password: teamPassword, avatar: 'KS', role: 'leadgen', leadsAssigned: 0, callsMade: 0, followUpsCompleted: 0, followUpsPending: 0, conversionRate: 0, revenueClosed: 0 },
+    ]);
+    console.log('[SEED] ✅ Created 6 default users (admin + team)');
+    console.log('[SEED]   Admin: chiren@ualliances.com');
+    console.log('[SEED]   Team:  rajesh/priya/amit/deepa/karan @ualliances.com');
+  } catch (err) {
+    console.error('[SEED] ❌ Auto-seed failed:', err);
+  }
+}
+
 // ── Bind Port IMMEDIATELY, then connect to Mongo ──
 httpServer.listen(Number(PORT), '0.0.0.0', () => {
   console.log(`🚀 Unified Server (Next.js + Express) running publicly on port ${PORT}`);
@@ -224,8 +255,10 @@ httpServer.listen(Number(PORT), '0.0.0.0', () => {
   // Connect to DB asynchronously after we are listening so Railway doesn't timeout
   mongoose
     .connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
-    .then(() => {
+    .then(async () => {
       console.log('✅ Connected to MongoDB');
+      // Auto-create users if DB is empty (first deploy / fresh database)
+      await autoSeedAdmin();
     })
     .catch((err) => {
       console.error('❌ MONGODB CONNECTION ERROR:', err.message);
