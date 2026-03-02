@@ -7,7 +7,12 @@ import Notification from './models/Notification';
 
 dotenv.config({ override: false });
 
-const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/insurelead';
+const MONGODB_URI =
+  process.env.MONGODB_URI ||
+  process.env.MONGODB_URL ||
+  process.env.MONGO_URL ||
+  process.env.DATABASE_URL ||
+  'mongodb://localhost:27017/insurelead';
 
 function requireEnv(name: string): string {
   const value = process.env[name]?.trim();

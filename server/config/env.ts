@@ -3,11 +3,21 @@ import dotenv from 'dotenv';
 
 dotenv.config({ override: false });
 
+const resolvedMongoUri =
+    process.env.MONGODB_URI ||
+    process.env.MONGODB_URL ||
+    process.env.MONGO_URL ||
+    process.env.DATABASE_URL ||
+    '';
+
 const envSchema = z.object({
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
     PORT: z.string().optional(),
     INTERNAL_PORT: z.string().optional(),
-    MONGODB_URI: z.string().min(1, "MONGODB_URI is required"),
+    MONGODB_URI: z.string().optional(),
+    MONGODB_URL: z.string().optional(),
+    MONGO_URL: z.string().optional(),
+    DATABASE_URL: z.string().optional(),
     JWT_SECRET: z.string().min(32, "JWT_SECRET must be at least 32 characters"),
     JWT_REFRESH_SECRET: z.string().optional(),
     RESEND_API_KEY: z.string().optional(),
@@ -24,4 +34,12 @@ if (!_env.success) {
     process.exit(1);
 }
 
-export const env = _env.data;
+if (!resolvedMongoUri) {
+    console.error("❌ Missing MongoDB connection string. Set one of: MONGODB_URI, MONGODB_URL, MONGO_URL, DATABASE_URL");
+    process.exit(1);
+}
+
+export const env = {
+    ..._env.data,
+    MONGODB_URI: resolvedMongoUri,
+};
