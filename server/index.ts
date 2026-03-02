@@ -34,8 +34,8 @@ console.log(`[BOOT] MODE=${isProduction ? 'production' : 'development'}, PORT=${
 const app = express();
 const httpServer = http.createServer(app);
 
-// ── Trust Railway's reverse proxy ──
-app.set('trust proxy', 1);
+// ── Trust reverse proxy chain (Railway/edge/load balancer) ──
+app.set('trust proxy', true);
 
 // ── Attach Socket.IO ──
 initIO(httpServer);
@@ -122,9 +122,10 @@ app.use((req: Request, _res: Response, nextMiddleware: NextFunction) => {
 // General API: 100 req / 15 min per IP
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 100,
+  max: isProduction ? 300 : 1000,
   standardHeaders: true,
   legacyHeaders: false,
+  skip: (req) => req.path === '/health' || req.method === 'OPTIONS',
   message: { error: 'Too many requests, please try again later' },
 });
 app.use('/api', apiLimiter);
@@ -132,10 +133,11 @@ app.use('/api', apiLimiter);
 // Strict auth limiter: 5 req / 15 min per IP on sensitive endpoints
 const strictAuthLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 5,
+  max: isProduction ? 10 : 50,
   standardHeaders: true,
   legacyHeaders: false,
-  skipSuccessfulRequests: false,
+  // Count failed attempts only, so successful login/refresh doesn't burn quota
+  skipSuccessfulRequests: true,
   message: { error: 'Too many auth attempts, please try again in 15 minutes' },
 });
 app.use('/api/auth/login', strictAuthLimiter);
