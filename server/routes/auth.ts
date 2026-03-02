@@ -2,18 +2,83 @@ import { Router, Request, Response } from 'express';
 import crypto from 'crypto';
 import jwt from 'jsonwebtoken';
 import User from '../models/User';
+import AuditLog from '../models/AuditLog';
 import { auth, AuthRequest } from '../middleware/auth';
-import { sendPasswordResetEmail } from '../services/email';
+import { sendPasswordResetEmail, sendWelcomeEmail } from '../services/email';
 
 const router = Router();
 
+import { env } from '../config/env';
+
+const IS_PROD = env.NODE_ENV === 'production';
+
 function getJwtSecret(): string {
-  const secret = process.env.JWT_SECRET;
-  if (!secret) throw new Error('JWT_SECRET is not configured');
-  return secret;
+  const s = env.JWT_SECRET;
+  if (!s) throw new Error('JWT_SECRET is not configured');
+  return s;
 }
 
-// POST /api/auth/login
+function getRefreshSecret(): string {
+  return (env.JWT_REFRESH_SECRET || env.JWT_SECRET) + '_refresh';
+}
+
+/** Set both httpOnly cookies: access (15 min) + refresh (7 days) */
+function setAuthCookies(res: Response, accessToken: string, refreshToken: string) {
+  const secure = IS_PROD;
+  const sameSite = IS_PROD ? ('strict' as const) : ('lax' as const);
+
+  res.cookie('insurelead_access', accessToken, {
+    httpOnly: true,
+    secure,
+    sameSite,
+    maxAge: 15 * 60 * 1000,          // 15 minutes
+    path: '/',
+  });
+
+  res.cookie('insurelead_refresh', refreshToken, {
+    httpOnly: true,
+    secure,
+    sameSite,
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    path: '/api/auth/refresh',
+  });
+}
+
+function clearAuthCookies(res: Response) {
+  res.clearCookie('insurelead_access', { path: '/' });
+  res.clearCookie('insurelead_refresh', { path: '/api/auth/refresh' });
+}
+
+const BACKUP_SECRET_SUFFIX = '_admin_backup';
+
+function setAdminBackupCookie(res: Response, adminId: string, adminEmail: string) {
+  const secure = IS_PROD;
+  const sameSite = IS_PROD ? ('strict' as const) : ('lax' as const);
+  const token = jwt.sign(
+    { adminId, adminEmail },
+    getJwtSecret() + BACKUP_SECRET_SUFFIX,
+    { expiresIn: '2h' },
+  );
+  res.cookie('insurelead_admin_backup', token, {
+    httpOnly: true,
+    secure,
+    sameSite,
+    maxAge: 2 * 60 * 60 * 1000, // 2 hours
+    path: '/api/auth/exit-impersonation',
+  });
+}
+
+function clearAdminBackupCookie(res: Response) {
+  res.clearCookie('insurelead_admin_backup', { path: '/api/auth/exit-impersonation' });
+}
+
+function issueTokenPair(payload: { id: string; role: string; email: string; name?: string; impersonatedBy?: string }) {
+  const accessToken = jwt.sign(payload, getJwtSecret(), { expiresIn: '15m' });
+  const refreshToken = jwt.sign({ id: payload.id }, getRefreshSecret(), { expiresIn: '7d' });
+  return { accessToken, refreshToken };
+}
+
+// ─── POST /api/auth/login ────────────────────────────────────────────────────
 router.post('/login', async (req: Request, res: Response) => {
   try {
     const { email, password } = req.body;
@@ -23,29 +88,70 @@ router.post('/login', async (req: Request, res: Response) => {
 
     const trimmedEmail = String(email).trim().toLowerCase();
     const user = await User.findOne({ email: trimmedEmail });
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
+    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
 
     const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({ error: 'Invalid credentials' });
-    }
+    if (!isMatch) return res.status(401).json({ error: 'Invalid credentials' });
 
-    const token = jwt.sign(
-      { id: user._id.toString(), role: user.role, email: user.email },
-      getJwtSecret(),
-      { expiresIn: '7d' }
-    );
+    const { accessToken, refreshToken } = issueTokenPair({
+      id: user._id.toString(),
+      role: user.role,
+      email: user.email,
+      name: user.name,
+    });
 
-    res.json({ token, user: user.toJSON() });
+    setAuthCookies(res, accessToken, refreshToken);
+    res.json({ user: user.toJSON() });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// GET /api/auth/me
+// ─── POST /api/auth/logout ───────────────────────────────────────────────────
+router.post('/logout', (_req: Request, res: Response) => {
+  clearAuthCookies(res);
+  res.json({ message: 'Logged out' });
+});
+
+// ─── POST /api/auth/refresh ──────────────────────────────────────────────────
+router.post('/refresh', async (req: Request, res: Response) => {
+  try {
+    const refreshToken = (req as any).cookies?.insurelead_refresh;
+    if (!refreshToken) {
+      return res.status(401).json({ error: 'No refresh token' });
+    }
+
+    let payload: { id: string };
+    try {
+      payload = jwt.verify(refreshToken, getRefreshSecret()) as { id: string };
+    } catch {
+      clearAuthCookies(res);
+      return res.status(401).json({ error: 'Refresh token expired' });
+    }
+
+    const user = await User.findById(payload.id);
+    if (!user) {
+      clearAuthCookies(res);
+      return res.status(401).json({ error: 'User not found' });
+    }
+
+    const { accessToken, refreshToken: newRefresh } = issueTokenPair({
+      id: user._id.toString(),
+      role: user.role,
+      email: user.email,
+      name: user.name,
+    });
+
+    setAuthCookies(res, accessToken, newRefresh);
+    res.json({ user: user.toJSON() });
+  } catch (err) {
+    console.error('Refresh error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ─── GET /api/auth/me ────────────────────────────────────────────────────────
 router.get('/me', auth, async (req: AuthRequest, res: Response) => {
   try {
     const user = await User.findById(req.user!.id);
@@ -56,7 +162,7 @@ router.get('/me', auth, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// POST /api/auth/impersonate — admin can get a token for any user
+// ─── POST /api/auth/impersonate ──────────────────────────────────────────────
 router.post('/impersonate', auth, async (req: AuthRequest, res: Response) => {
   try {
     if (req.user?.role !== 'admin') {
@@ -66,23 +172,132 @@ router.post('/impersonate', auth, async (req: AuthRequest, res: Response) => {
     if (!userId) {
       return res.status(400).json({ error: 'userId is required' });
     }
+
     const target = await User.findById(userId);
     if (!target) {
       return res.status(404).json({ error: 'User not found' });
     }
-    const token = jwt.sign(
-      { id: target._id.toString(), role: target.role, email: target.email },
-      getJwtSecret(),
-      { expiresIn: '2h' }
-    );
-    res.json({ token, user: target.toJSON() });
+
+    // Audit log
+    await AuditLog.create({
+      action: 'impersonate',
+      adminId: req.user.id,
+      adminEmail: req.user.email,
+      targetId: target._id.toString(),
+      targetEmail: target.email,
+      targetRole: target.role,
+      ip: req.ip,
+      timestamp: new Date(),
+    });
+
+    // Store admin identity in a backup cookie so exit-impersonation can
+    // restore the session without forcing re-login.
+    setAdminBackupCookie(res, req.user.id, req.user.email);
+
+    const { accessToken, refreshToken } = issueTokenPair({
+      id: target._id.toString(),
+      role: target.role,
+      email: target.email,
+      name: target.name,
+      impersonatedBy: req.user.email,
+    });
+
+    setAuthCookies(res, accessToken, refreshToken);
+    res.json({ user: target.toJSON(), impersonatedBy: req.user.email });
   } catch (err) {
     console.error('Impersonate error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// POST /api/auth/forgot-password
+// ─── POST /api/auth/exit-impersonation ───────────────────────────────────────
+router.post('/exit-impersonation', async (req: Request, res: Response) => {
+  try {
+    const backupToken = (req as any).cookies?.insurelead_admin_backup;
+    if (!backupToken) {
+      return res.status(401).json({ error: 'No impersonation session found' });
+    }
+
+    let payload: { adminId: string; adminEmail: string };
+    try {
+      payload = jwt.verify(backupToken, getJwtSecret() + BACKUP_SECRET_SUFFIX) as {
+        adminId: string;
+        adminEmail: string;
+      };
+    } catch {
+      clearAdminBackupCookie(res);
+      return res.status(401).json({ error: 'Impersonation session expired — please log in again' });
+    }
+
+    const admin = await User.findById(payload.adminId);
+    if (!admin || admin.role !== 'admin') {
+      clearAdminBackupCookie(res);
+      return res.status(401).json({ error: 'Admin account not found' });
+    }
+
+    const { accessToken, refreshToken } = issueTokenPair({
+      id: admin._id.toString(),
+      role: admin.role,
+      email: admin.email,
+      name: admin.name,
+    });
+
+    setAuthCookies(res, accessToken, refreshToken);
+    clearAdminBackupCookie(res);
+    res.json({ user: admin.toJSON() });
+  } catch (err) {
+    console.error('Exit impersonation error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ─── POST /api/auth/register (admin-only) ────────────────────────────────────
+router.post('/register', auth, async (req: AuthRequest, res: Response) => {
+  try {
+    if (req.user?.role !== 'admin') {
+      return res.status(403).json({ error: 'Admin access required' });
+    }
+
+    const { name, email, role, avatar } = req.body;
+    if (!name || !email || !role) {
+      return res.status(400).json({ error: 'name, email, and role are required' });
+    }
+
+    const VALID_ROLES = ['admin', 'sdr', 'hr', 'leadgen'];
+    if (!VALID_ROLES.includes(role)) {
+      return res.status(400).json({ error: `role must be one of: ${VALID_ROLES.join(', ')}` });
+    }
+
+    const existing = await User.findOne({ email: String(email).trim().toLowerCase() });
+    if (existing) {
+      return res.status(409).json({ error: 'A user with that email already exists' });
+    }
+
+    // Generate a temporary password
+    const tempPassword = crypto.randomBytes(10).toString('base64url').slice(0, 14);
+
+    const newUser = new User({
+      name: String(name).trim(),
+      email: String(email).trim().toLowerCase(),
+      password: tempPassword,
+      role,
+      avatar: avatar || `https://api.dicebear.com/7.x/initials/svg?seed=${encodeURIComponent(name)}`,
+    });
+    await newUser.save();
+
+    // Send welcome email (fire-and-forget)
+    sendWelcomeEmail(newUser.email, newUser.name, tempPassword, role).catch((e) =>
+      console.error('Welcome email failed:', e)
+    );
+
+    res.status(201).json({ user: newUser.toJSON() });
+  } catch (err) {
+    console.error('Register error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ─── POST /api/auth/forgot-password ──────────────────────────────────────────
 router.post('/forgot-password', async (req: Request, res: Response) => {
   try {
     const { email } = req.body;
@@ -98,16 +313,17 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
       return res.json({ message: 'If that email exists, a reset link has been sent.' });
     }
 
-    // Generate token
-    const resetToken = crypto.randomBytes(32).toString('hex');
-    user.resetToken = resetToken;
-    user.resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour
+    // Generate plain token, store its SHA-256 hash
+    const plainToken = crypto.randomBytes(32).toString('hex');
+    const tokenHash = crypto.createHash('sha256').update(plainToken).digest('hex');
+
+    user.resetTokenHash = tokenHash;
+    user.resetTokenExpiry = new Date(Date.now() + 15 * 60 * 1000); // 15 minutes
     await user.save();
 
-    // Send email in background — don't block the response
-    sendPasswordResetEmail(user.email, user.name, resetToken).catch((emailErr) => {
-      console.error('Email send failed:', emailErr);
-    });
+    sendPasswordResetEmail(user.email, user.name, plainToken).catch((e) =>
+      console.error('Reset email failed:', e)
+    );
 
     res.json({ message: 'If that email exists, a reset link has been sent.' });
   } catch (err) {
@@ -116,7 +332,7 @@ router.post('/forgot-password', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/auth/reset-password
+// ─── POST /api/auth/reset-password ───────────────────────────────────────────
 router.post('/reset-password', async (req: Request, res: Response) => {
   try {
     const { token, password } = req.body;
@@ -128,8 +344,10 @@ router.post('/reset-password', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
 
+    const tokenHash = crypto.createHash('sha256').update(String(token)).digest('hex');
+
     const user = await User.findOne({
-      resetToken: token,
+      resetTokenHash: tokenHash,
       resetTokenExpiry: { $gt: new Date() },
     });
 
@@ -138,7 +356,8 @@ router.post('/reset-password', async (req: Request, res: Response) => {
     }
 
     user.password = password;
-    user.resetToken = undefined;
+    // Clear token immediately
+    user.resetTokenHash = undefined;
     user.resetTokenExpiry = undefined;
     await user.save(); // pre-save hook hashes password
 
@@ -149,7 +368,7 @@ router.post('/reset-password', async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/auth/change-password (authenticated)
+// ─── POST /api/auth/change-password (authenticated) ──────────────────────────
 router.post('/change-password', auth, async (req: AuthRequest, res: Response) => {
   try {
     const { currentPassword, newPassword } = req.body;
@@ -172,7 +391,7 @@ router.post('/change-password', auth, async (req: AuthRequest, res: Response) =>
     }
 
     user.password = newPassword;
-    await user.save(); // pre-save hook hashes password
+    await user.save();
 
     res.json({ message: 'Password changed successfully' });
   } catch (err) {

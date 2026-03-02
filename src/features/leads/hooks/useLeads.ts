@@ -129,10 +129,17 @@ export function useDeleteLead() {
     });
 }
 
+export function useImportPreview() {
+    return useMutation({
+        mutationFn: (file: File) => api.leads.importPreview(file),
+    });
+}
+
 export function useImportCSV() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (file: File) => api.leads.importCSV(file),
+        mutationFn: ({ file, customMappings }: { file: File, customMappings?: Record<string, string | null> }) =>
+            api.leads.importCSV(file, customMappings),
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ['leads'] });
             qc.invalidateQueries({ queryKey: ['kpis'] });

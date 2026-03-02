@@ -1,11 +1,12 @@
 import { Resend } from 'resend';
+import { env } from '../config/env';
 
-const apiKey = process.env.RESEND_API_KEY;
+const apiKey = env.RESEND_API_KEY;
 const resend = apiKey ? new Resend(apiKey) : null;
 if (!apiKey) console.warn('[EMAIL] RESEND_API_KEY not set — email sending disabled');
 
-const FROM = process.env.SMTP_FROM || 'onboarding@resend.dev';
-const APP_URL = process.env.APP_URL || 'http://localhost:8080';
+const FROM = env.SMTP_FROM || 'onboarding@resend.dev';
+const APP_URL = env.APP_URL || 'http://localhost:8080';
 
 export async function sendWelcomeEmail(
     to: string,
@@ -65,7 +66,7 @@ export async function sendPasswordResetEmail(
     <div style="font-family: 'Inter', Arial, sans-serif; max-width: 520px; margin: 0 auto; padding: 32px; background: #fff; border-radius: 12px;">
       <h2 style="color: #0F2A44; margin-bottom: 4px;">Password Reset Request</h2>
       <p style="color: #5a6a7c; font-size: 14px;">Hi ${name}, we received a request to reset your password.</p>
-      <p style="font-size: 13px; color: #5a6a7c;">Click the button below to set a new password. This link expires in <strong>1 hour</strong>.</p>
+      <p style="font-size: 13px; color: #5a6a7c;">Click the button below to set a new password. This link expires in <strong>15 minutes</strong>.</p>
       <a href="${resetUrl}" style="display: inline-block; background: #F5A623; color: #fff; text-decoration: none; padding: 10px 24px; border-radius: 6px; font-size: 14px; font-weight: 600; margin: 16px 0;">Reset Password</a>
       <p style="font-size: 12px; color: #888; margin-top: 16px;">If you didn't request this, you can safely ignore this email.</p>
       <hr style="border: none; border-top: 1px solid #eee; margin: 24px 0;" />

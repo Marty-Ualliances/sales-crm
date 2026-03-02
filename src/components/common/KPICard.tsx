@@ -10,6 +10,7 @@ interface KPICardProps {
   variant?: 'default' | 'danger' | 'success';
   subtitle?: string;
   link?: string;
+  onClick?: () => void;
 }
 
 const VARIANT_STYLES = {
@@ -39,17 +40,25 @@ const VARIANT_STYLES = {
   },
 };
 
-export default function KPICard({ title, value, icon: Icon, change, variant = 'default', subtitle, link }: KPICardProps) {
+export default function KPICard({ title, value, icon: Icon, change, variant = 'default', subtitle, link, onClick }: KPICardProps) {
   const router = useRouter();
   const s = VARIANT_STYLES[variant];
 
   return (
     <div
-      className={`relative rounded-xl border border-border bg-card p-5 shadow-card transition-all duration-300 border-l-4 ${s.border} ${s.glow} hover:-translate-y-1 ${link ? 'cursor-pointer' : ''} group overflow-hidden h-full flex flex-col justify-between`}
-      onClick={() => link && router.push(link)}
-      role={link ? 'button' : undefined}
-      tabIndex={link ? 0 : undefined}
-      onKeyDown={e => link && e.key === 'Enter' && router.push(link)}
+      className={`relative rounded-xl border border-border bg-card p-5 shadow-card transition-all duration-300 border-l-4 ${s.border} ${s.glow} hover:-translate-y-1 ${link || onClick ? 'cursor-pointer' : ''} group overflow-hidden h-full flex flex-col justify-between`}
+      onClick={() => {
+        if (onClick) onClick();
+        else if (link) router.push(link);
+      }}
+      role={link || onClick ? 'button' : undefined}
+      tabIndex={link || onClick ? 0 : undefined}
+      onKeyDown={e => {
+        if (e.key === 'Enter') {
+          if (onClick) onClick();
+          else if (link) router.push(link);
+        }
+      }}
     >
       {/* Corner gradient accent */}
       <div className={`absolute top-0 right-0 w-32 h-32 bg-gradient-to-bl ${s.accentGradient} rounded-bl-[100%] pointer-events-none opacity-60 group-hover:opacity-100 transition-opacity duration-500`} />

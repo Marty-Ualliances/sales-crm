@@ -3,12 +3,13 @@ import multer from 'multer';
 import Lead from '../models/Lead';
 import { auth, adminOnly, leadgenOrAdmin, AuthRequest } from '../middleware/auth';
 import { notifyLeadStatusChange, notifyNewLead, notifyFollowUpDue, notifyLeadImported } from '../utils/notificationHelper';
-import { getIO } from '../socket';
+import { emitLeadChangedToRoles } from '../socket';
 
 import * as XLSX from 'xlsx';
+import { mapColumns, applyMergeRules, normalizeHeader, type MappingResult, type ColumnMapping, type MergeRule } from '../utils/csvColumnMapper';
 
-function emitLeadChange(action: string, data?: any) {
-  try { getIO().emit('lead:changed', { action, ...(data || {}) }); } catch (_) { }
+function emitLeadChange(action: string, data?: Record<string, unknown>) {
+  try { emitLeadChangedToRoles(action, data); } catch (_) { }
 }
 
 const router = Router();
@@ -24,41 +25,6 @@ const upload = multer({
     cb(null, true);
   },
 });
-
-// ── Column name → model field mapping (fuzzy - handles many variations) ──
-const CSV_FIELD_MAP: Record<string, string> = {
-  // Name variations
-  'date': 'date', 'added date': 'date', 'created': 'date', 'created date': 'date',
-  'source': 'source', 'lead source': 'source',
-  'name': 'name', 'full name': 'name', 'contact name': 'name', 'lead name': 'name', 'first name': 'name', 'fullname': 'name',
-  'title': 'title', 'job title': 'title', 'position': 'title', 'role': 'title', 'designation': 'title',
-  // Company
-  'company name': 'companyName', 'company': 'companyName', 'organization': 'companyName', 'org': 'companyName', 'firm': 'companyName', 'employer': 'companyName',
-  // Contact
-  'email': 'email', 'email address': 'email', 'e-mail': 'email', 'emailaddress': 'email',
-  'work direct phone': 'workDirectPhone', 'work phone': 'workDirectPhone', 'direct phone': 'workDirectPhone', 'office phone': 'workDirectPhone', 'business phone': 'workDirectPhone',
-  'phone': 'workDirectPhone', 'phone number': 'workDirectPhone', 'telephone': 'workDirectPhone', 'tel': 'workDirectPhone',
-  'home phone': 'homePhone', 'home phone number': 'homePhone',
-  'mobile phone': 'mobilePhone', 'mobile': 'mobilePhone', 'cell': 'mobilePhone', 'cell phone': 'mobilePhone', 'cellphone': 'mobilePhone',
-  'corporate phone': 'corporatePhone',
-  'other phone': 'otherPhone',
-  'company phone': 'companyPhone',
-  // Numbers
-  'employees': 'employeeCount', '# employees': 'employeeCount', 'number of employees': 'employeeCount', 'num employees': 'employeeCount', 'employee count': 'employeeCount', 'company size': 'employeeCount',
-  // URLs
-  'person linkedin url': 'personLinkedinUrl', 'linkedin': 'personLinkedinUrl', 'linkedin url': 'personLinkedinUrl', 'linkedin profile': 'personLinkedinUrl',
-  'website': 'website', 'company website': 'website', 'url': 'website', 'web': 'website',
-  'company linkedin url': 'companyLinkedinUrl', 'company linkedin': 'companyLinkedinUrl',
-  // Location
-  'city': 'city', 'town': 'city',
-  'state': 'state', 'province': 'state', 'region': 'state',
-  'address': 'address', 'street': 'address', 'street address': 'address',
-  // Assignment
-  'assigned': 'assignedAgent', 'assigned agent': 'assignedAgent', 'agent': 'assignedAgent', 'owner': 'assignedAgent', 'rep': 'assignedAgent', 'sales rep': 'assignedAgent',
-  'status': 'status', 'lead status': 'status', 'stage': 'status',
-  'notes': 'notes', 'note': 'notes', 'comments': 'notes', 'comment': 'notes', 'description': 'notes',
-  'follow-up date': 'nextFollowUp', 'follow up date': 'nextFollowUp', 'followup': 'nextFollowUp', 'next follow up': 'nextFollowUp',
-};
 
 // Valid enum values
 const VALID_SOURCES = ['CSV Import', 'Manual', 'Website', 'Referral', 'LinkedIn', 'Cold – High Fit', 'Warm – Engaged', 'Cold – Quick Sourced', 'Cold – Bulk Data', 'Other'];
@@ -93,9 +59,9 @@ router.get('/', auth, async (req: AuthRequest, res: Response) => {
     const { status, search, agent } = req.query;
     const filter: any = {};
 
-    if (req.user!.role === 'sdr') {
+    if (req.user?.role === 'sdr') {
       const User = (await import('../models/User')).default;
-      const user = await User.findById(req.user!.id);
+      const user = await User.findById(req.user.id);
       if (user) filter.assignedAgent = user.name;
     } else if (agent) {
       filter.assignedAgent = agent;
@@ -128,9 +94,9 @@ router.get('/', auth, async (req: AuthRequest, res: Response) => {
 router.get('/kpis', auth, async (req: AuthRequest, res: Response) => {
   try {
     const filter: any = {};
-    if (req.user!.role === 'sdr') {
+    if (req.user?.role === 'sdr') {
       const User = (await import('../models/User')).default;
-      const user = await User.findById(req.user!.id);
+      const user = await User.findById(req.user.id);
       if (user) filter.assignedAgent = user.name;
     }
 
@@ -225,7 +191,7 @@ router.get('/:id', auth, async (req: AuthRequest, res: Response) => {
 router.post('/', auth, async (req: AuthRequest, res: Response) => {
   try {
     const User = (await import('../models/User')).default;
-    const currentUser = await User.findById(req.user!.id);
+    const currentUser = req.user?.id ? await User.findById(req.user.id) : null;
     const lead = new Lead({ ...req.body, addedBy: currentUser?.name || 'Unknown' });
     await lead.save();
 
@@ -238,12 +204,39 @@ router.post('/', auth, async (req: AuthRequest, res: Response) => {
   }
 });
 
+// POST /api/leads/import/preview — preview column mapping before import
+router.post('/import/preview', auth, upload.single('file'), async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    const { headers, rows } = parseSpreadsheet(req.file.buffer, req.file.originalname);
+    if (rows.length === 0) {
+      return res.status(400).json({ error: 'File has no data rows' });
+    }
+
+    // Run robust column mapping
+    const mapping = mapColumns(headers);
+
+    res.json({
+      headers,
+      mappings: mapping.mappings,
+      unmapped: mapping.unmapped,
+      mergeRules: mapping.mergeRules,
+      sampleRows: rows.slice(0, 5),
+      totalRows: rows.length,
+    });
+  } catch (err: any) {
+    console.error('Import preview error:', err);
+    res.status(500).json({ error: `Preview failed: ${err.message}` });
+  }
+});
+
 // POST /api/leads/import — bulk import (CSV, TSV, Excel)
 router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-    // Parse file using SheetJS (handles xlsx, xls, csv, tsv automatically)
+    // Parse file using SheetJS
     const { headers, rows } = parseSpreadsheet(req.file.buffer, req.file.originalname);
     console.log(`[Import] File: ${req.file.originalname}, Headers: [${headers.join(', ')}], Rows: ${rows.length}`);
 
@@ -251,67 +244,32 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
       return res.status(400).json({ error: 'File has no data rows' });
     }
 
-    // Map headers to model fields with robust substring/fuzzy matching
-    const headerMap: Record<string, string | null> = {};
-    const unmappedHeaders: string[] = [];
+    // ── Build column mapping ──────────────────────────────────────────────
+    // Use robust mapper, then apply any user-provided overrides
+    const autoMapping = mapColumns(headers);
+    let { headerMap, unmapped, mergeRules } = autoMapping;
 
-    // All valid schema fields to map
-    const VALID_FIELDS = [
-      'date', 'source', 'name', 'title', 'companyName', 'email', 'workDirectPhone',
-      'homePhone', 'mobilePhone', 'corporatePhone', 'otherPhone', 'companyPhone',
-      'employeeCount', 'personLinkedinUrl', 'website', 'companyLinkedinUrl', 'address',
-      'city', 'state', 'status', 'assignedAgent', 'notes', 'nextFollowUp',
-      'priority', 'segment', 'sourceChannel'
-    ];
+    // Accept optional custom mappings from the frontend (user overrides)
+    const customMappings: Record<string, string | null> | undefined =
+      req.body?.customMappings ? JSON.parse(req.body.customMappings) : undefined;
 
-    headers.forEach(h => {
-      if (!h.trim()) return;
-      const cleanKey = h.toLowerCase().replace(/[^a-z0-9 ]/g, '').replace(/\s+/g, ' ').trim();
-      const noSpaceKey = cleanKey.replace(/\s/g, '');
-
-      let mappedField = CSV_FIELD_MAP[cleanKey] || CSV_FIELD_MAP[noSpaceKey] || null;
-
-      // Try exact schema match
-      if (!mappedField) {
-        const exactMatch = VALID_FIELDS.find(f => f.toLowerCase() === noSpaceKey);
-        if (exactMatch) mappedField = exactMatch;
+    if (customMappings) {
+      for (const [csvHeader, crmField] of Object.entries(customMappings)) {
+        headerMap[csvHeader] = crmField;
       }
+      // Recalculate unmapped
+      unmapped = headers.filter(h => !headerMap[h]);
+    }
 
-      // Robust partial matches for critical fields
-      if (!mappedField) {
-        if (cleanKey.includes('email')) mappedField = 'email';
-        else if (cleanKey.includes('company') && (cleanKey.includes('name') || noSpaceKey === 'company')) mappedField = 'companyName';
-        else if (cleanKey.includes('first') || cleanKey.includes('last') || cleanKey.includes('name')) mappedField = 'name';
-        else if (cleanKey.includes('title') || cleanKey.includes('role')) mappedField = 'title';
-        else if (cleanKey.includes('mobile') || cleanKey.includes('cell')) mappedField = 'mobilePhone';
-        else if (cleanKey.includes('phone') || cleanKey.includes('tel')) {
-          if (cleanKey.includes('company') || cleanKey.includes('office') || cleanKey.includes('biz')) mappedField = 'companyPhone';
-          else if (cleanKey.includes('home')) mappedField = 'homePhone';
-          else mappedField = 'workDirectPhone';
-        }
-        else if (cleanKey.includes('linkedin')) {
-          if (cleanKey.includes('company')) mappedField = 'companyLinkedinUrl';
-          else mappedField = 'personLinkedinUrl';
-        }
-        else if (cleanKey.includes('web') || cleanKey.includes('url')) mappedField = 'website';
-        else if (cleanKey.includes('address') || cleanKey.includes('street')) mappedField = 'address';
-        else if (cleanKey.includes('city')) mappedField = 'city';
-        else if (cleanKey.includes('state') || cleanKey.includes('province')) mappedField = 'state';
-        else if (cleanKey.includes('employee') || cleanKey.includes('size')) mappedField = 'employeeCount';
-        else if (cleanKey.includes('note') || cleanKey.includes('comment')) mappedField = 'notes';
-        else if (cleanKey.includes('status') || cleanKey.includes('stage')) mappedField = 'status';
-        else if (cleanKey.includes('agent') || cleanKey.includes('owner') || cleanKey.includes('rep') || cleanKey.includes('assign')) mappedField = 'assignedAgent';
-      }
-
-      headerMap[h] = mappedField;
-      if (!mappedField) unmappedHeaders.push(h);
-    });
-
-    console.log(`[Import] Mapped: ${Object.values(headerMap).filter(Boolean).length}/${headers.length} columns. Unmapped: [${unmappedHeaders.join(', ')}]`);
+    console.log(`[Import] Mapped: ${Object.values(headerMap).filter(Boolean).length}/${headers.length} columns. Unmapped: [${unmapped.join(', ')}]`);
+    if (mergeRules.length > 0) {
+      console.log(`[Import] Merge rules: ${mergeRules.map(r => `${r.sourceHeaders.join(' + ')} → ${r.targetField}`).join(', ')}`);
+    }
 
     // Get current user for default agent assignment
     const User = (await import('../models/User')).default;
-    const currentUser = await User.findById(req.user!.id);
+    const currentUserId = req.user?.id;
+    const currentUser = currentUserId ? await User.findById(currentUserId) : null;
     const defaultAgent = currentUser?.name || 'Unassigned';
 
     const imported: any[] = [];
@@ -319,7 +277,12 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
 
     for (let i = 0; i < rows.length; i++) {
       try {
-        const row = rows[i];
+        let row = rows[i];
+
+        // Apply merge rules (e.g. first name + last name → name)
+        if (mergeRules.length > 0) {
+          row = applyMergeRules(row, mergeRules);
+        }
 
         // Build document with safe defaults for ALL enum fields
         const doc: any = {
@@ -328,7 +291,6 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
           status: 'New Lead',
           assignedAgent: defaultAgent,
           addedBy: defaultAgent,
-          // Explicitly set ALL enum fields to prevent validation errors
           priority: 'C',
           segment: '',
           sourceChannel: '',
@@ -346,17 +308,44 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
           if (field === 'employeeCount') {
             const num = parseInt(v.replace(/[^0-9]/g, ''), 10);
             if (!isNaN(num)) doc[field] = num;
+          } else if (field === 'revenue') {
+            const num = parseFloat(v.replace(/[^0-9.]/g, ''));
+            if (!isNaN(num)) doc[field] = num;
           } else if (field === 'nextFollowUp' || field === 'date') {
             const d = new Date(v);
             if (!isNaN(d.getTime())) doc[field] = d;
+          } else if (field === 'priority') {
+            // Normalise priority values
+            const upper = v.toUpperCase();
+            if (['A', 'B', 'C'].includes(upper)) doc[field] = upper;
+            else if (['HIGH', '1', 'HOT'].includes(upper)) doc[field] = 'A';
+            else if (['MEDIUM', 'MED', '2', 'WARM'].includes(upper)) doc[field] = 'B';
+            else doc[field] = 'C';
+          } else if (field === 'segment') {
+            // Smart industry → segment mapping
+            const VALID_SEGMENTS = ['Insurance', 'Accounting', 'Finance', 'Healthcare', 'Legal', 'Other'];
+            const segMatch = VALID_SEGMENTS.find(s => s.toLowerCase() === v.toLowerCase());
+            if (segMatch) {
+              doc[field] = segMatch;
+            } else {
+              // Put industry in notes if it doesn't match a segment
+              doc.notes = (doc.notes || '') + (doc.notes ? '\n' : '') + `Industry: ${v}`;
+            }
           } else {
             doc[field] = v;
           }
         }
 
+        // Handle merge rule results (e.g. merged 'name' field)
+        for (const rule of mergeRules) {
+          if (rule.targetField === 'name' && row[rule.targetField] && !doc.name) {
+            doc.name = row[rule.targetField];
+          }
+        }
+
         // Collect data from unknown columns → notes
         const extraFields: string[] = [];
-        for (const header of unmappedHeaders) {
+        for (const header of unmapped) {
           const val = row[header];
           if (val && String(val).trim()) extraFields.push(`${header}: ${String(val).trim()}`);
         }
@@ -394,6 +383,26 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
           doc.segment = '';
         }
 
+        // Deduplication: skip if a lead with the same email or phone already exists
+        {
+          const normEmail = doc.email ? String(doc.email).trim().toLowerCase() : null;
+          const normPhone = doc.workDirectPhone || doc.mobilePhone || null;
+          const dupFilter: Record<string, unknown>[] = [];
+          if (normEmail) {
+            // Escape special chars for regex or just use direct match
+            const escapedEmail = normEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            dupFilter.push({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } });
+          }
+          if (normPhone) dupFilter.push({ workDirectPhone: normPhone }, { mobilePhone: normPhone });
+          if (dupFilter.length > 0) {
+            const existing = await Lead.findOne({ $or: dupFilter }).lean();
+            if (existing) {
+              errors.push({ row: i + 2, error: `Duplicate: lead with matching email/phone already exists` });
+              continue;
+            }
+          }
+        }
+
         // Activities and stageHistory
         doc.activities = [{ type: 'note', description: 'Lead imported via CSV', timestamp: new Date(), agent: defaultAgent }];
         doc.stageHistory = [{ stage: doc.status, enteredAt: new Date(), agent: defaultAgent }];
@@ -405,7 +414,6 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
           imported.push(lead);
         } catch (saveErr: any) {
           console.error(`[Import] Row ${i + 2} save failed: ${saveErr.message} — retrying with minimal doc`);
-          // Retry with absolute minimum fields
           try {
             const minimalDoc = {
               name: doc.name || `Lead Row ${i + 2}`,
@@ -437,18 +445,19 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
       }
     }
 
-    // Create notification for successful import (scoped to this user)
-    if (imported.length > 0) {
-      await notifyLeadImported(imported.length, req.user!.id);
+    // Create notification for successful import
+    if (imported.length > 0 && req.user?.id) {
+      await notifyLeadImported(imported.length, req.user.id);
       emitLeadChange('imported', { count: imported.length });
     }
 
     console.log(`[Import] Done: ${imported.length} imported, ${errors.length} errors out of ${rows.length} rows`);
 
+    const duplicateCount = errors.filter(e => e.error.startsWith('Duplicate:')).length;
     res.json({
       imported: imported.length,
-      errors: errors.length,
-      skipped: 0,
+      errors: errors.length - duplicateCount,
+      skipped: duplicateCount,
       errorDetails: errors.slice(0, 50),
       total: rows.length,
     });
@@ -466,7 +475,7 @@ router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
     // Track who closed the lead
     if (req.body.status === 'Active Account' && oldLead && oldLead.status !== 'Active Account') {
       const User = (await import('../models/User')).default;
-      const currentUser = await User.findById(req.user!.id);
+      const currentUser = req.user?.id ? await User.findById(req.user.id) : null;
       req.body.closedBy = currentUser?.name || 'Unknown';
       req.body.closedAt = new Date();
     }
@@ -474,7 +483,7 @@ router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
     // Push stageHistory entry on status change
     if (oldLead && req.body.status && oldLead.status !== req.body.status) {
       const User2 = (await import('../models/User')).default;
-      const currentUser2 = await User2.findById(req.user!.id);
+      const currentUser2 = req.user?.id ? await User2.findById(req.user.id) : null;
       if (!req.body.$push) req.body.$push = {};
       req.body.$push.stageHistory = {
         stage: req.body.status,
@@ -487,8 +496,8 @@ router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
     if (!lead) return res.status(404).json({ error: 'Lead not found' });
 
     // Create notification for status change (scoped to this user)
-    if (oldLead && req.body.status && oldLead.status !== req.body.status) {
-      await notifyLeadStatusChange(lead._id.toString(), lead.name, oldLead.status, req.body.status, req.user!.id);
+    if (oldLead && req.body.status && oldLead.status !== req.body.status && req.user?.id) {
+      await notifyLeadStatusChange(lead._id.toString(), lead.name, oldLead.status, req.body.status, req.user.id);
     }
     emitLeadChange('updated', { leadId: lead._id });
     res.json(lead);
@@ -501,7 +510,7 @@ router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
 router.post('/:id/complete-followup', auth, async (req: AuthRequest, res: Response) => {
   try {
     const User = (await import('../models/User')).default;
-    const currentUser = await User.findById(req.user!.id);
+    const currentUser = req.user?.id ? await User.findById(req.user.id) : null;
     const agentName = currentUser?.name || 'Unknown';
 
     const lead = await Lead.findById(req.params.id);
@@ -537,7 +546,7 @@ router.post('/:id/schedule-followup', auth, async (req: AuthRequest, res: Respon
   try {
     const { date } = req.body;
     const User = (await import('../models/User')).default;
-    const currentUser = await User.findById(req.user!.id);
+    const currentUser = req.user?.id ? await User.findById(req.user.id) : null;
     const agentName = currentUser?.name || 'Unknown';
 
     const lead = await Lead.findById(req.params.id);
@@ -556,7 +565,9 @@ router.post('/:id/schedule-followup', auth, async (req: AuthRequest, res: Respon
     await lead.save();
 
     // Create notification for follow-up scheduled (scoped to this user)
-    await notifyFollowUpDue(lead._id.toString(), lead.name, new Date(date), req.user!.id);
+    if (req.user?.id) {
+      await notifyFollowUpDue(lead._id.toString(), lead.name, new Date(date), req.user.id);
+    }
 
     res.json(lead);
   } catch (err) {

@@ -1,73 +1,108 @@
-# Welcome to your Lovable project
+# United Alliances Sales CRM
 
-## Project info
+A robust, internal Sales CRM tailored for the Ahmedabad Sales Team. This platform offers dedicated dashboards for different roles (Admin, SDR, LeadGen, HR), lead tracking, call logging, and pipeline management.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## 🚀 Setup Instructions
 
-## How can I edit this code?
+This project is built using:
+- **Frontend**: Next.js, React, Tailwind CSS, shadcn/ui
+- **Backend**: Express.js, TypeScript, Mongoose
+- **Database**: MongoDB
 
-There are several ways of editing your application.
+### 1. Prerequisites
+- Node.js (v18+)
+- Local MongoDB running on port 27017, or a MongoDB Atlas URI.
 
-**Use Lovable**
-
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
+### 2. Installation
+Clone the repository and install dependencies:
 ```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+npm install
+```
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
+### 3. Environment Variables
+Create a `.env` file in the root directory and add the following variables:
 
-# Step 3: Install the necessary dependencies.
-npm i
+```env
+# Server Configuration
+PORT=3000
+INTERNAL_PORT=3001
+NODE_ENV=development
+APP_URL=http://localhost:3000
 
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Database
+MONGODB_URI=mongodb://127.0.0.1:27017/insurelead
+
+# Security
+JWT_SECRET=super_secret_jwt_key
+JWT_REFRESH_SECRET=super_secret_refresh_key
+
+# Email
+RESEND_API_KEY=your_resend_api_key
+SMTP_FROM=noreply@ualliances.com
+```
+
+### 4. Database Seeding
+To populate the database with realistic test data (including Indian/Ahmedabad personas and companies), run:
+```sh
+npm run seed
+```
+
+### 5. Running the Application
+Start the development server using:
+```sh
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+The frontend will be available at `http://localhost:3000` and the backend will start on the configured `INTERNAL_PORT` (e.g., `3001`).
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+---
 
-**Use GitHub Codespaces**
+## 👥 Adding a New Sales Rep via Terminal
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+Since this is a local setup, you can add new users (Sales Reps) directly via terminal.
 
-## What technologies are used for this project?
+1. Ensure the database is running and you have `ts-node` or `tsx` available to execute scripts against the DB.
+2. An admin can create an account directly in MongoDB, for example using the node REPL or a quick script:
 
-This project is built with:
+Create a file named `addUser.ts`:
+```typescript
+import mongoose from 'mongoose';
+import User from './server/models/User';
+import { env } from './server/config/env';
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+async function addUser() {
+  await mongoose.connect(env.MONGODB_URI);
+  
+  await User.create({
+    name: 'New Sales Rep',
+    email: 'newrep@ualliances.com',
+    password: 'Password123!', // Password will be hashed automatically by the model pre-save hook
+    role: 'sdr',
+    avatar: 'NR',
+    leadsAssigned: 0,
+    callsMade: 0,
+    followUpsCompleted: 0,
+    followUpsPending: 0,
+    conversionRate: 0,
+    revenueClosed: 0
+  });
 
-## How can I deploy this project?
+  console.log('User created successfully');
+  process.exit(0);
+}
 
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
+addUser();
+```
 
-## Can I connect a custom domain to my Lovable project?
+Then run it:
+```sh
+npx tsx addUser.ts
+```
 
-Yes, you can!
+Alternatively, `Admin` users can manage the sales team via the Admin Dashboard.
 
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+## 🔐 Role-Based Access
+- **Admin**: Full access. View analytics, manage all users, assign leads.
+- **SDR (Sales Development Rep)**: Manages their pipeline, tracks calls, registers activities and conversions.
+- **LeadGen**: Add and qualify leads. Pass qualified leads to the SDR team.
+- **HR**: Track employee performance and internal sales tracking.

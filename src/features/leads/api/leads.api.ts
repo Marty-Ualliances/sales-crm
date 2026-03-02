@@ -1,4 +1,4 @@
-import { request, getToken } from '@/services/api/client';
+import { request } from '@/services/api/client';
 import { LeadSchema, LeadsListSchema, KPIsSchema } from '@/features/leads/schemas/lead.schema';
 import type { Lead, KPIs } from '@/features/leads/schemas/lead.schema';
 
@@ -35,18 +35,34 @@ export const leadsApi = {
         request<any>(`/leads/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) =>
         request<any>(`/leads/${id}`, { method: 'DELETE' }),
-    importCSV: async (file: File) => {
-        const token = getToken();
+    importPreview: async (file: File) => {
         const formData = new FormData();
         formData.append('file', file);
-        const res = await fetch('/api/leads/import', {
+        const res = await fetch('/api/leads/import/preview', {
             method: 'POST',
-            headers: { ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+            credentials: 'include',
             body: formData,
         });
         if (!res.ok) {
             const body = await res.json().catch(() => ({}));
-            throw new Error(body.error || 'Import failed');
+            throw new Error((body as { error?: string }).error || 'Preview failed');
+        }
+        return res.json();
+    },
+    importCSV: async (file: File, customMappings?: Record<string, string | null>) => {
+        const formData = new FormData();
+        formData.append('file', file);
+        if (customMappings) {
+            formData.append('customMappings', JSON.stringify(customMappings));
+        }
+        const res = await fetch('/api/leads/import', {
+            method: 'POST',
+            credentials: 'include',
+            body: formData,
+        });
+        if (!res.ok) {
+            const body = await res.json().catch(() => ({}));
+            throw new Error((body as { error?: string }).error || 'Import failed');
         }
         return res.json();
     },

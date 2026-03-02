@@ -3,12 +3,14 @@ import { useRouter, usePathname } from 'next/navigation';
 import { ReactNode, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  Home, Users, FileSpreadsheet, LogOut, StickyNote, Zap, Menu, X, Mail, Linkedin, Target, Calendar, Settings
+  Home, Users, FileSpreadsheet, LogOut, StickyNote, Zap, Menu, X, Mail, Linkedin, Target, Calendar
 } from 'lucide-react';
 import { useNotifications } from '@/hooks/useApi';
 import NotificationDropdown from '@/components/common/NotificationDropdown';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { useSocket } from '@/hooks/useSocket';
+import { useRole } from '@/hooks/useRole';
+import { ThemeToggle } from '@/components/common/ThemeToggle';
 
 const leadGenNavItems = [
   { icon: Home, label: 'Dashboard', path: '/leadgen' },
@@ -18,7 +20,6 @@ const leadGenNavItems = [
   { icon: Linkedin, label: 'LinkedIn Outreach', path: '/leadgen/linkedin' },
   { icon: Calendar, label: 'Meetings', path: '/leadgen/meetings' },
   { icon: StickyNote, label: 'My Notes', path: '/leadgen/notes' },
-  { icon: Settings, label: 'Settings', path: '/leadgen/settings' },
 ];
 
 export default function LeadGenLayout({ children }: { children: ReactNode }) {
@@ -26,46 +27,21 @@ export default function LeadGenLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [authBootstrapped, setAuthBootstrapped] = useState(false);
-  const [isAdminImpersonating, setIsAdminImpersonating] = useState(false);
   const { data: notifications = [] } = useNotifications();
   const unreadCount = notifications.filter((n: any) => !n.read).length;
   useSocket();
 
+  const { isLeadGen, isAdmin } = useRole();
+
   useEffect(() => {
-    const hasStoredToken = typeof window !== 'undefined' && !!localStorage.getItem('insurelead_token');
-    if (!user && !hasStoredToken) {
+    if (!user) {
       router.replace('/login');
-      return;
+    } else if (!isLeadGen && !isAdmin) {
+      router.replace(`/${user.role}`);
     }
-    setAuthBootstrapped(true);
+  }, [user, router, isLeadGen, isAdmin]);
 
-    if (typeof window !== 'undefined') {
-      setIsAdminImpersonating(!!localStorage.getItem('insurelead_admin_token'));
-    }
-  }, [user, router]);
-
-  const handleReturnToAdmin = () => {
-    const adminToken = localStorage.getItem('insurelead_admin_token');
-    const adminUser = localStorage.getItem('insurelead_admin_user');
-
-    if (adminToken && adminUser) {
-      localStorage.setItem('insurelead_token', adminToken);
-      localStorage.setItem('insurelead_user', adminUser);
-      document.cookie = `insurelead_token=${adminToken}; path=/; max-age=604800; samesite=lax`;
-
-      localStorage.removeItem('insurelead_admin_token');
-      localStorage.removeItem('insurelead_admin_user');
-
-      window.location.href = '/admin';
-    }
-  };
-
-  const handleLogout = () => {
-    logout();
-  };
-
-  if (!user || !authBootstrapped) {
+  if (!user) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <p className="text-sm text-muted-foreground">Loading workspace...</p>
@@ -79,11 +55,9 @@ export default function LeadGenLayout({ children }: { children: ReactNode }) {
       <aside className={`fixed inset-y-0 left-0 z-50 w-64 transform bg-sidebar border-r border-sidebar-border flex flex-col transition-transform lg:relative lg:translate-x-0 ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
         <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] via-transparent to-black/[0.05] pointer-events-none" />
 
-        <div className="relative flex h-16 items-center gap-3 px-6 border-b border-sidebar-border">
-          <div className="flex items-center justify-center rounded-lg bg-white/70 p-1.5 backdrop-blur-lg border border-white/30 shadow-sm">
-            <img src="/team-united-logo.png" alt="United Alliances" className="h-6" />
-          </div>
-          <span className="text-lg font-bold text-sidebar-foreground tracking-tight">United Alliances</span>
+        <div className="relative flex h-16 items-center gap-2.5 px-6 border-b border-sidebar-border">
+          <img src="/team-united-logo.png" alt="Team United" className="h-8" />
+          <span className="text-lg font-bold text-sidebar-foreground tracking-tight">TeamUnited</span>
           <button className="ml-auto lg:hidden text-sidebar-foreground hover:text-white transition-colors" onClick={() => setSidebarOpen(false)}>
             <X className="h-5 w-5" />
           </button>
@@ -123,7 +97,7 @@ export default function LeadGenLayout({ children }: { children: ReactNode }) {
 
         <div className="relative p-3 border-t border-sidebar-border">
           <button
-            onClick={handleLogout}
+            onClick={logout}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-all duration-200"
           >
             <LogOut className="h-4 w-4" />
@@ -143,15 +117,7 @@ export default function LeadGenLayout({ children }: { children: ReactNode }) {
           </button>
           <div className="hidden lg:block" />
           <div className="flex items-center gap-3">
-            {isAdminImpersonating && (
-              <button
-                onClick={handleReturnToAdmin}
-                className="hidden sm:flex items-center gap-2 rounded-lg px-3 py-1.5 border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary transition-colors text-sm font-medium mr-2"
-              >
-                <Users className="h-4 w-4" />
-                Return to Admin
-              </button>
-            )}
+            <ThemeToggle />
             <NotificationDropdown notifications={notifications} unreadCount={unreadCount} />
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-amber-500 to-amber-600 text-white text-sm font-medium ring-2 ring-amber-500/20">

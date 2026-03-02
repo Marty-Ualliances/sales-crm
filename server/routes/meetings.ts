@@ -16,7 +16,7 @@ function emitMeetingChange(action: string, data?: any) {
 router.get('/', auth, async (req: AuthRequest, res: Response) => {
   try {
     const role = req.user!.role;
-    let filter: any = {};
+    const filter: any = {};
     if (role === 'sdr') {
       filter.createdBy = req.user!.id;
     }

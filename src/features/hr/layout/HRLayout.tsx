@@ -3,17 +3,19 @@ import { useRouter, usePathname } from 'next/navigation';
 import { ReactNode, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  ClipboardCheck, Home, LogOut, Menu, StickyNote, Users, X, Zap, FileText, Settings,
+  ClipboardCheck, Home, LogOut, Menu, StickyNote, Users, X, Zap, FileText,
 } from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { useSocket } from '@/hooks/useSocket';
+import { useSocket } from '@/hooks/useSocket';
+import { useRole } from '@/hooks/useRole';
+import { ThemeToggle } from '@/components/common/ThemeToggle';
 
 const hrNavItems = [
   { icon: Home, label: 'Dashboard', path: '/hr' },
   { icon: Users, label: 'Lead Tracker', path: '/hr/leads' },
   { icon: ClipboardCheck, label: 'Closed Leads', path: '/hr/closed-leads' },
   { icon: StickyNote, label: 'My Notes', path: '/hr/notes' },
-  { icon: Settings, label: 'Settings', path: '/hr/settings' },
 ];
 
 export default function HRLayout({ children }: { children: ReactNode }) {
@@ -21,44 +23,19 @@ export default function HRLayout({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { user, logout } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [authBootstrapped, setAuthBootstrapped] = useState(false);
-  const [isAdminImpersonating, setIsAdminImpersonating] = useState(false);
   useSocket();
 
+  const { isHR, isAdmin } = useRole();
+
   useEffect(() => {
-    const hasStoredToken = typeof window !== 'undefined' && !!localStorage.getItem('insurelead_token');
-    if (!user && !hasStoredToken) {
+    if (!user) {
       router.replace('/login');
-      return;
+    } else if (!isHR && !isAdmin) {
+      router.replace(`/${user.role}`);
     }
-    setAuthBootstrapped(true);
+  }, [user, router, isHR, isAdmin]);
 
-    if (typeof window !== 'undefined') {
-      setIsAdminImpersonating(!!localStorage.getItem('insurelead_admin_token'));
-    }
-  }, [user, router]);
-
-  const handleReturnToAdmin = () => {
-    const adminToken = localStorage.getItem('insurelead_admin_token');
-    const adminUser = localStorage.getItem('insurelead_admin_user');
-
-    if (adminToken && adminUser) {
-      localStorage.setItem('insurelead_token', adminToken);
-      localStorage.setItem('insurelead_user', adminUser);
-      document.cookie = `insurelead_token=${adminToken}; path=/; max-age=604800; samesite=lax`;
-
-      localStorage.removeItem('insurelead_admin_token');
-      localStorage.removeItem('insurelead_admin_user');
-
-      window.location.href = '/admin';
-    }
-  };
-
-  const handleLogout = () => {
-    logout();
-  };
-
-  if (!user || !authBootstrapped) {
+  if (!user) {
     return (
       <div className="flex h-screen items-center justify-center bg-background">
         <p className="text-sm text-muted-foreground">Loading workspace...</p>
@@ -75,11 +52,9 @@ export default function HRLayout({ children }: { children: ReactNode }) {
       >
         <div className="absolute inset-0 bg-gradient-to-b from-white/[0.03] via-transparent to-black/[0.05] pointer-events-none" />
 
-        <div className="relative flex h-16 items-center gap-3 px-6 border-b border-sidebar-border">
-          <div className="flex items-center justify-center rounded-lg bg-white/70 p-1.5 backdrop-blur-lg border border-white/30 shadow-sm">
-            <img src="/team-united-logo.png" alt="United Alliances" className="h-6" />
-          </div>
-          <span className="text-lg font-bold text-sidebar-foreground tracking-tight">United Alliances</span>
+        <div className="relative flex h-16 items-center gap-2.5 px-6 border-b border-sidebar-border">
+          <img src="/team-united-logo.png" alt="Team United" className="h-8" />
+          <span className="text-lg font-bold text-sidebar-foreground tracking-tight">TeamUnited</span>
           <button className="ml-auto lg:hidden text-sidebar-foreground hover:text-white transition-colors" onClick={() => setSidebarOpen(false)}>
             <X className="h-5 w-5" />
           </button>
@@ -120,7 +95,7 @@ export default function HRLayout({ children }: { children: ReactNode }) {
 
         <div className="relative p-3 border-t border-sidebar-border">
           <button
-            onClick={handleLogout}
+            onClick={logout}
             className="flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-sm text-sidebar-foreground/70 hover:bg-destructive/10 hover:text-destructive transition-all duration-200"
           >
             <LogOut className="h-4 w-4" />
@@ -142,15 +117,7 @@ export default function HRLayout({ children }: { children: ReactNode }) {
           </button>
           <div className="hidden lg:block" />
           <div className="flex items-center gap-3">
-            {isAdminImpersonating && (
-              <button
-                onClick={handleReturnToAdmin}
-                className="hidden sm:flex items-center gap-2 rounded-lg px-3 py-1.5 border border-primary/20 bg-primary/5 hover:bg-primary/10 text-primary transition-colors text-sm font-medium mr-2"
-              >
-                <Users className="h-4 w-4" />
-                Return to Admin
-              </button>
-            )}
+            <ThemeToggle />
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 text-white text-sm font-medium ring-2 ring-emerald-500/20">
                 {user?.avatar || 'HR'}

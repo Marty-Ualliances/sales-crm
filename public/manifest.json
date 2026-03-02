@@ -1,0 +1,23 @@
+{
+    "name": "TeamUnited Sales CRM",
+    "short_name": "TeamUnited",
+    "description": "Internal Sales CRM for United Alliances",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#0F2A44",
+    "icons": [
+        {
+            "src": "/team-united-logo.png",
+            "sizes": "192x192",
+            "type": "image/png",
+            "purpose": "any"
+        },
+        {
+            "src": "/team-united-logo.png",
+            "sizes": "512x512",
+            "type": "image/png",
+            "purpose": "any"
+        }
+    ]
+}

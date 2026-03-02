@@ -9,7 +9,9 @@ export const metadata: Metadata = {
     description: 'Sales CRM built with Next.js',
     icons: {
         icon: '/team-united-logo.png',
+        apple: '/team-united-logo.png',
     },
+    manifest: '/manifest.json',
 };
 
 export default function RootLayout({

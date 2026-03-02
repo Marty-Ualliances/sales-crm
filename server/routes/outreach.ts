@@ -17,7 +17,7 @@ router.get('/', auth, async (req: AuthRequest, res: Response) => {
         const user = req.user!;
         const todayStr = getTodayStr();
 
-        let filter: any = {};
+        const filter: any = {};
         if (user.role === 'sdr' || user.role === 'leadgen') {
             filter.agentName = user.name;
         }

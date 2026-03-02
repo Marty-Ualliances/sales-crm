@@ -4,6 +4,7 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import next from 'next';
 
@@ -21,17 +22,13 @@ import { initIO } from './socket';
 
 dotenv.config({ override: false });
 
-// ── Validate required env vars ──
-const MONGODB_URI = process.env.MONGODB_URI;
-const JWT_SECRET = process.env.JWT_SECRET;
-if (!MONGODB_URI) { console.error('FATAL: MONGODB_URI is not set'); process.exit(1); }
-if (!JWT_SECRET || JWT_SECRET.length < 32) {
-  console.error('FATAL: JWT_SECRET must be set and at least 32 characters');
-  process.exit(1);
-}
+import { env } from './config/env';
 
-const isProduction = process.env.NODE_ENV === 'production';
-const PORT = process.env.PORT || Number(process.env.INTERNAL_PORT) || 3001;
+// ── Validate required env vars ──
+const MONGODB_URI = env.MONGODB_URI;
+const JWT_SECRET = env.JWT_SECRET;
+const isProduction = env.NODE_ENV === 'production';
+const PORT = env.PORT || env.INTERNAL_PORT || 3001;
 console.log(`[BOOT] MODE=${isProduction ? 'production' : 'development'}, PORT=${PORT}`);
 
 const app = express();
@@ -50,7 +47,7 @@ app.use(helmet({
   contentSecurityPolicy: false, // Disabled for Next.js
 }));
 
-const allowedOriginsString = process.env.ALLOWED_ORIGINS || '';
+const allowedOriginsString = env.ALLOWED_ORIGINS || '';
 const parsedOrigins = allowedOriginsString
   .split(',')
   .map(url => url.trim().replace(/\/$/, ''))
@@ -80,6 +77,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+app.use(cookieParser());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
@@ -106,23 +104,29 @@ app.use((req: Request, _res: Response, nextMiddleware: NextFunction) => {
   nextMiddleware();
 });
 
+// General API: 100 req / 15 min per IP
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests, please try again later' },
 });
 app.use('/api', apiLimiter);
 
-const authLimiter = rateLimit({
+// Strict auth limiter: 5 req / 15 min per IP on sensitive endpoints
+const strictAuthLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 20,
+  max: 5,
   standardHeaders: true,
   legacyHeaders: false,
-  message: { error: 'Too many auth attempts, please try again later' },
+  skipSuccessfulRequests: false,
+  message: { error: 'Too many auth attempts, please try again in 15 minutes' },
 });
-app.use('/api/auth', authLimiter);
+app.use('/api/auth/login', strictAuthLimiter);
+app.use('/api/auth/forgot-password', strictAuthLimiter);
+app.use('/api/auth/reset-password', strictAuthLimiter);
+app.use('/api/auth/impersonate', strictAuthLimiter);
 
 app.disable('x-powered-by');
 
@@ -133,17 +137,21 @@ app.use((req: Request, _res: Response, nextMiddleware: NextFunction) => {
   nextMiddleware();
 });
 
+import { auditLogMiddleware } from './middleware/auditLog';
+
 // ── Routes ──
+// Apply AuditLog to required areas (only logs mutations per its internal logic)
+app.use('/api/auth/impersonate', auditLogMiddleware);
 app.use('/api/auth', authRoutes);
-app.use('/api/leads', leadRoutes);
-app.use('/api/calls', callRoutes);
-app.use('/api/agents', agentRoutes);
+app.use('/api/leads', auditLogMiddleware, leadRoutes);
+app.use('/api/calls', auditLogMiddleware, callRoutes);
+app.use('/api/agents', auditLogMiddleware, agentRoutes);
+app.use('/api/meetings', auditLogMiddleware, meetingRoutes);
+app.use('/api/outreach', auditLogMiddleware, outreachRoutes);
 app.use('/api/notifications', notificationRoutes);
 app.use('/api/tasks', taskRoutes);
 app.use('/api/hr', hrRoutes);
 app.use('/api/notes', noteRoutes);
-app.use('/api/meetings', meetingRoutes);
-app.use('/api/outreach', outreachRoutes);
 
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', db: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected' });

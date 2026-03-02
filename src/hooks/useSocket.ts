@@ -13,6 +13,7 @@ function getSocket(): Socket {
       transports: ['websocket', 'polling'],
       reconnectionAttempts: 5,
       reconnectionDelay: 2000,
+      withCredentials: true, // send httpOnly cookies with socket handshake
     });
   }
   return socketInstance;

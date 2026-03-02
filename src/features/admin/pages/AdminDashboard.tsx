@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import DateFilter, { DateRange, filterByDateRange } from '@/components/common/DateFilter';
+import { ActiveAccountsListModal } from '../../leads/components/ActiveAccountsListModal';
 
 export default function AdminDashboard() {
   const { data: leads = [], isLoading: leadsLoading } = useLeads();
@@ -18,6 +19,7 @@ export default function AdminDashboard() {
 
   const [selectedUser, setSelectedUser] = useState<string>('all');
   const [dateRange, setDateRange] = useState<DateRange>('last7days');
+  const [isActiveAccountsModalOpen, setIsActiveAccountsModalOpen] = useState(false);
 
   // Filter leads for KPI cards
   const filteredLeads = filterByDateRange(leads, dateRange);
@@ -120,7 +122,7 @@ export default function AdminDashboard() {
           <KPICard title="Appointment Setter" value={filteredLeads.filter((l: any) => l.status === 'Meeting Booked').length} icon={CheckCircle} link="/admin/leads" />
         </div>
         <div className="animate-slide-up stagger-5">
-          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Closed Won').length} icon={BarChart2} link="/admin/active-accounts" />
+          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Closed Won').length} icon={BarChart2} onClick={() => setIsActiveAccountsModalOpen(true)} />
         </div>
       </div>
 
@@ -307,6 +309,12 @@ export default function AdminDashboard() {
           </ResponsiveContainer>
         </div>
       </div>
+
+      <ActiveAccountsListModal
+        isOpen={isActiveAccountsModalOpen}
+        onClose={() => setIsActiveAccountsModalOpen(false)}
+        leads={filteredLeads}
+      />
     </div>
   );
 }

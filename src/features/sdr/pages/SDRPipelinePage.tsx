@@ -3,7 +3,9 @@ import { useState } from 'react';
 import { useLeads, useAgents, useCreateCall } from '@/hooks/useApi';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { Badge } from '@/components/ui/badge';
-import { Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Loader2, Download } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { PIPELINE_STAGES } from '@/features/leads/constants/pipeline';
 import { toast } from 'sonner';
 
@@ -58,12 +60,39 @@ export default function SDRPipelinePage() {
     );
   }
 
+  const handleExport = () => {
+    const exportData = leads.map((lead: any) => ({
+      Name: lead.name,
+      Company: lead.companyName || '',
+      Phone: lead.phone || lead.workDirectPhone || '',
+      Email: lead.email || '',
+      Status: lead.status,
+      AssignedAgent: lead.assignedAgent || 'Unassigned',
+      CallCount: lead.callCount || 0,
+      Source: lead.source || '',
+      Location: [lead.city, lead.state].filter(Boolean).join(', ') || ''
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Pipeline');
+
+    const date = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `SDR_Pipeline_Export_${date}.xlsx`);
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">My Pipeline</h1>
-          <p className="text-sm text-muted-foreground mt-1">Your personal lead funnel</p>
+        <div className="flex items-center gap-4">
+          <div>
+            <h1 className="text-2xl font-bold text-foreground">My Pipeline</h1>
+            <p className="text-sm text-muted-foreground mt-1">Your personal lead funnel</p>
+          </div>
+          <Button onClick={handleExport} variant="outline" className="flex items-center gap-2">
+            <Download className="h-4 w-4" />
+            Export Pipeline
+          </Button>
         </div>
         {user?.role !== 'sdr' && (
           <select

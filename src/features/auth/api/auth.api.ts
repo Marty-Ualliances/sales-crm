@@ -1,14 +1,18 @@
 import { request } from '@/services/api/client';
 
+export interface AuthUser {
+    id: string;
+    name: string;
+    email: string;
+    avatar: string;
+    role: 'admin' | 'sdr' | 'hr' | 'leadgen';
+}
+
+/** Shape returned by login / impersonate — no token in body (server sets httpOnly cookie) */
 export interface LoginResponse {
-    token: string;
-    user: {
-        id: string;
-        name: string;
-        email: string;
-        avatar: string;
-        role: 'admin' | 'sdr' | 'hr' | 'leadgen';
-    };
+    user: AuthUser;
+    /** Present on impersonate responses to show the banner */
+    impersonatedBy?: string;
 }
 
 export const authApi = {
@@ -17,11 +21,22 @@ export const authApi = {
             method: 'POST',
             body: JSON.stringify({ email, password }),
         }),
-    me: () => request<LoginResponse['user']>('/auth/me'),
+    logout: () =>
+        request<{ message: string }>('/auth/logout', { method: 'POST' }),
+    refresh: () =>
+        request<{ user: AuthUser }>('/auth/refresh', { method: 'POST' }),
+    me: () => request<AuthUser>('/auth/me'),
     impersonate: (userId: string) =>
         request<LoginResponse>('/auth/impersonate', {
             method: 'POST',
             body: JSON.stringify({ userId }),
+        }),
+    exitImpersonation: () =>
+        request<{ user: AuthUser }>('/auth/exit-impersonation', { method: 'POST' }),
+    register: (data: { name: string; email: string; role: string; avatar?: string }) =>
+        request<{ user: AuthUser }>('/auth/register', {
+            method: 'POST',
+            body: JSON.stringify(data),
         }),
     forgotPassword: (email: string) =>
         request<{ message: string }>('/auth/forgot-password', {

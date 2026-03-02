@@ -3,13 +3,13 @@ import { usePathname, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Phone, Mail, User, Calendar, FileText, RefreshCw, Loader2, Building2, MapPin, Globe, Linkedin, Users, CheckCircle, PhoneCall, Send, ShieldCheck, AlertTriangle, Tag, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useLead, useCalls, useCompleteFollowUp, useUpdateLead, useLeads, useCreateCall, useMeetings, useCreateMeeting, useUpdateMeeting } from '@/hooks/useApi';
+import { useLead, useCalls, useCompleteFollowUp, useUpdateLead, useLeads, useCreateCall, useMeetings, useCreateMeeting, useUpdateMeeting, useAgents } from '@/hooks/useApi';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { LeadStatus, Employee } from '@/features/leads/types/leads';
 import { getStageBadgeClass, PIPELINE_STAGES, PRIORITIES, getPriorityBadgeClass, SEGMENTS, SOURCE_CHANNELS, checkQualityGate } from '@/features/leads/constants/pipeline';
 import { CADENCE_TEMPLATES, TOUCH_TYPE_CONFIG, getCadenceTasks } from '@/features/leads/constants/cadences';
 import { toast } from 'sonner';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { MeetingBookedModal, MeetingBookedData } from '@/features/meetings/components/MeetingBookedModal';
 import { MeetingCompletedModal } from '@/features/meetings/components/MeetingCompletedModal';
 import { EmployeeForm } from '@/features/leads/components/EmployeeForm';
@@ -57,6 +57,8 @@ export default function LeadDetailPage() {
   const { data: meetings = [] } = useMeetings();
   const createMeeting = useCreateMeeting();
   const updateMeeting = useUpdateMeeting();
+  const { data: agents = [] } = useAgents();
+  const sdrs = useMemo(() => agents.filter((a: any) => a.role === 'sdr'), [agents]);
 
   const [editingNotes, setEditingNotes] = useState(false);
   const [notes, setNotes] = useState('');
@@ -86,6 +88,20 @@ export default function LeadDetailPage() {
     pathname.startsWith('/hr') ? '/hr' :
       pathname.startsWith('/leadgen') ? '/leadgen' : '/admin';
 
+  useEffect(() => {
+    if (lead) {
+      setLeadInfoForm({
+        name: lead.name || '',
+        title: lead.title || '',
+        email: lead.email || '',
+        phone: lead.phone || '',
+        personLinkedinUrl: lead.personLinkedinUrl || '',
+        assignedAgent: lead.assignedAgent || '',
+        status: lead.status || 'New Lead',
+      });
+    }
+  }, [lead]);
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -102,18 +118,6 @@ export default function LeadDetailPage() {
       </div>
     );
   }
-
-  useEffect(() => {
-    setLeadInfoForm({
-      name: lead.name || '',
-      title: lead.title || '',
-      email: lead.email || '',
-      phone: lead.phone || '',
-      personLinkedinUrl: lead.personLinkedinUrl || '',
-      assignedAgent: lead.assignedAgent || '',
-      status: lead.status || 'New Lead',
-    });
-  }, [lead]);
 
   const leadCalls = allCalls.filter((c: any) => c.leadId === lead.id || c.leadId === lead._id);
 
@@ -310,7 +314,6 @@ export default function LeadDetailPage() {
           phone: leadInfoForm.phone.trim(),
           personLinkedinUrl: leadInfoForm.personLinkedinUrl.trim(),
           assignedAgent: leadInfoForm.assignedAgent.trim(),
-          status: leadInfoForm.status,
         },
       });
       setIsEditingLeadInfo(false);
@@ -441,7 +444,7 @@ export default function LeadDetailPage() {
             <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-xl space-y-4">
               <h2 className="text-lg font-bold text-foreground">Set Next Step</h2>
               <p className="text-sm text-muted-foreground">
-                Moving to <span className="font-semibold text-foreground">{nextStepPrompt.status}</span> â€" define what happens next to keep momentum.
+                Moving to <span className="font-semibold text-foreground">{nextStepPrompt.status}</span> — define what happens next to keep momentum.
               </p>
               <div className="space-y-3">
                 <div>
@@ -482,7 +485,7 @@ export default function LeadDetailPage() {
             <div>
               <h1 className="text-xl sm:text-2xl font-bold text-foreground">{lead.name}</h1>
               <p className="text-sm text-muted-foreground">
-                {lead.title && `${lead.title} Â· `}{lead.companyName || 'Lead Details'}
+                {lead.title && `${lead.title} · `}{lead.companyName || 'Lead Details'}
               </p>
             </div>
           </div>
@@ -519,6 +522,24 @@ export default function LeadDetailPage() {
                   <option key={s.key} value={s.key} className="bg-background text-foreground">{s.label}</option>
                 ))}
               </select>
+              <div className="flex items-center justify-end w-full gap-2 mt-1">
+                <input
+                  type="checkbox"
+                  id="meeting-completed"
+                  checked={normalizeStatus(lead.status) === 'meeting completed'}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      handleStatusChange('Meeting Completed');
+                    } else {
+                      handleStatusChange('Meeting Booked');
+                    }
+                  }}
+                  className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
+                />
+                <label htmlFor="meeting-completed" className="text-sm font-medium text-foreground cursor-pointer select-none">
+                  Meeting Completed
+                </label>
+              </div>
             </div>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 pt-5 border-t border-border">
@@ -608,11 +629,11 @@ export default function LeadDetailPage() {
               {activeTab === 'team' && (
                 <Button
                   size="sm"
-                  variant={isEditingLeadInfo ? 'secondary' : 'outline'}
-                  className="mb-2"
-                  onClick={() => setIsEditingLeadInfo((value) => !value)}
+                  variant="outline"
+                  className="mb-2 gap-1.5"
+                  onClick={() => { setEditingEmployeeIdx(undefined); setShowEmployeeForm(true); }}
                 >
-                  {isEditingLeadInfo ? 'Cancel Edit' : 'Edit Lead Info'}
+                  <Plus className="h-3.5 w-3.5" /> Add Employee
                 </Button>
               )}
             </div>
@@ -621,16 +642,26 @@ export default function LeadDetailPage() {
           <div className="pt-6">
             {activeTab === 'team' ? (
               <div className="space-y-6">
-                {/* â"€â"€ Person Profile Card â"€â"€ */}
+                {/* ── Person Profile Card ── */}
                 <div className="rounded-xl border border-border bg-card shadow-card p-4 sm:p-8 space-y-5">
-                  <div className="flex items-center gap-4">
-                    <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground text-lg font-bold shrink-0">
-                      {lead.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2) || 'LD'}
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-4">
+                      <div className="flex h-14 w-14 items-center justify-center rounded-full bg-primary text-primary-foreground text-lg font-bold shrink-0">
+                        {lead.name?.split(' ').map((n: string) => n[0]).join('').slice(0, 2) || 'LD'}
+                      </div>
+                      <div className="min-w-0 flex-1">
+                        <h3 className="text-xl font-bold text-foreground">{lead.name}</h3>
+                        {lead.title && <p className="text-sm text-muted-foreground mt-0.5">{lead.title}</p>}
+                      </div>
                     </div>
-                    <div className="min-w-0 flex-1">
-                      <h3 className="text-xl font-bold text-foreground">{lead.name}</h3>
-                      {lead.title && <p className="text-sm text-muted-foreground mt-0.5">{lead.title}</p>}
-                    </div>
+                    <Button
+                      size="sm"
+                      variant={isEditingLeadInfo ? 'secondary' : 'ghost'}
+                      className={`h-8 w-8 px-0 ${isEditingLeadInfo ? 'text-foreground' : 'text-muted-foreground hover:text-foreground'}`}
+                      onClick={() => setIsEditingLeadInfo((value) => !value)}
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </Button>
                   </div>
 
                   {isEditingLeadInfo && (
@@ -665,19 +696,14 @@ export default function LeadDetailPage() {
                         placeholder="LinkedIn URL"
                         className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
                       />
-                      <input
+                      <select
                         value={leadInfoForm.assignedAgent}
                         onChange={(e) => setLeadInfoForm((prev) => ({ ...prev, assignedAgent: e.target.value }))}
-                        placeholder="Assigned Agent"
-                        className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
-                      />
-                      <select
-                        value={leadInfoForm.status}
-                        onChange={(e) => setLeadInfoForm((prev) => ({ ...prev, status: e.target.value }))}
                         className="h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground"
                       >
-                        {PIPELINE_STAGES.map((s) => (
-                          <option key={s.key} value={s.key}>{s.label}</option>
+                        <option value="">Unassigned</option>
+                        {sdrs.map((sdr: any) => (
+                          <option key={sdr.id} value={sdr.name}>{sdr.name}</option>
                         ))}
                       </select>
                       <div className="sm:col-span-2 lg:col-span-2 flex justify-end gap-2">
@@ -731,17 +757,7 @@ export default function LeadDetailPage() {
 
                 {/* Employees Section */}
                 <div className="rounded-xl border border-border bg-card shadow-card p-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-semibold text-foreground">Employees</h3>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      className="gap-1.5"
-                      onClick={() => { setEditingEmployeeIdx(undefined); setShowEmployeeForm(true); }}
-                    >
-                      <Plus className="h-3.5 w-3.5" /> Add Employee
-                    </Button>
-                  </div>
+                  <h3 className="text-lg font-semibold text-foreground">Employees</h3>
 
                   {showEmployeeForm && (
                     <div className="rounded-lg border border-border bg-secondary/20 p-4">
@@ -825,18 +841,14 @@ export default function LeadDetailPage() {
                     {/* Priority */}
                     <div>
                       <p className="text-xs text-muted-foreground mb-1.5">Priority</p>
-                      <div className="flex gap-1.5">
-                        {PRIORITIES.map(p => (
-                          <button
-                            key={p.key}
-                            onClick={() => handleFieldUpdate({ priority: p.key })}
-                            className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-semibold transition-all ${lead.priority === p.key ? p.badgeClass + ' ring-2 ring-offset-1 ring-current' : 'bg-muted/50 text-muted-foreground border-border hover:bg-muted'
-                              }`}
-                          >
-                            {p.label}
-                          </button>
-                        ))}
-                      </div>
+                      <select
+                        value={lead.priority || ''}
+                        onChange={e => handleFieldUpdate({ priority: e.target.value })}
+                        className="w-full h-8 rounded-lg border border-input bg-background px-2 text-sm text-foreground"
+                      >
+                        <option value="">— Select —</option>
+                        {PRIORITIES.map(p => <option key={p.key} value={p.key}>{p.label}</option>)}
+                      </select>
                     </div>
 
                     {/* Segment */}
@@ -847,7 +859,7 @@ export default function LeadDetailPage() {
                         onChange={e => handleFieldUpdate({ segment: e.target.value })}
                         className="w-full h-8 rounded-lg border border-input bg-background px-2 text-sm text-foreground"
                       >
-                        <option value="">â€" Select â€"</option>
+                        <option value="">— Select —</option>
                         {SEGMENTS.map(s => <option key={s} value={s}>{s}</option>)}
                       </select>
                     </div>
@@ -855,14 +867,16 @@ export default function LeadDetailPage() {
                     {/* Source Channel */}
                     <div>
                       <p className="text-xs text-muted-foreground mb-1.5">Source Channel</p>
-                      <select
+                      <input
+                        list="source-options"
                         value={lead.sourceChannel || ''}
                         onChange={e => handleFieldUpdate({ sourceChannel: e.target.value })}
+                        placeholder="Type or select source"
                         className="w-full h-8 rounded-lg border border-input bg-background px-2 text-sm text-foreground"
-                      >
-                        <option value="">â€" Select â€"</option>
-                        {SOURCE_CHANNELS.map(s => <option key={s} value={s}>{s}</option>)}
-                      </select>
+                      />
+                      <datalist id="source-options">
+                        {SOURCE_CHANNELS.map(s => <option key={s} value={s} />)}
+                      </datalist>
                     </div>
 
                     {/* Quality Gate */}
@@ -874,7 +888,7 @@ export default function LeadDetailPage() {
                           <AlertTriangle className="h-4 w-4 text-amber-500" />
                         )}
                         <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
-                          Quality Gate {qualityGate.pass ? 'âœ" Passed' : `â€" ${qualityGate.missing.length} missing`}
+                          Quality Gate {qualityGate.pass ? '✓ Passed' : `— ${qualityGate.missing.length} missing`}
                         </p>
                       </div>
                       {!qualityGate.pass && (
@@ -884,30 +898,7 @@ export default function LeadDetailPage() {
                       )}
                     </div>
 
-                    {/* Qualification â€" 3 Yes Rule */}
-                    <div className="pt-3 border-t border-border">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2">3 Yes Rule</p>
-                      {[
-                        { key: 'rightPerson' as const, label: 'Right Person â€" Decision maker?' },
-                        { key: 'realNeed' as const, label: 'Real Need â€" Admin/quoting/COIs pain?' },
-                        { key: 'timing' as const, label: 'Timing â€" Open to change 30-90 days?' },
-                      ].map(q => (
-                        <label key={q.key} className="flex items-center gap-2.5 py-1.5 cursor-pointer group">
-                          <input
-                            type="checkbox"
-                            checked={lead.qualification?.[q.key] || false}
-                            onChange={() => handleQualificationToggle(q.key)}
-                            className="h-4 w-4 rounded border-border text-primary focus:ring-primary"
-                          />
-                          <span className="text-sm text-foreground group-hover:text-primary transition-colors">{q.label}</span>
-                        </label>
-                      ))}
-                      {lead.qualification?.qualifiedAt && (
-                        <p className="text-xs text-emerald-600 dark:text-emerald-400 mt-1">
-                          âœ" Qualified on {new Date(lead.qualification.qualifiedAt).toLocaleDateString()} by {lead.qualification.qualifiedBy}
-                        </p>
-                      )}
-                    </div>
+
                   </div>
 
                   {/* Phone Numbers */}

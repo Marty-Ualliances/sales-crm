@@ -10,6 +10,7 @@ import { useAuth } from '@/features/auth/context/AuthContext';
 import { getCadenceTasks, TOUCH_TYPE_CONFIG, CADENCE_TEMPLATES } from '@/features/leads/constants/cadences';
 import DateFilter, { DateRange, filterByDateRange } from '@/components/common/DateFilter';
 import { useState } from 'react';
+import { ActiveAccountsListModal } from '../../leads/components/ActiveAccountsListModal';
 
 export default function SDRDashboard() {
   const { user } = useAuth();
@@ -19,6 +20,7 @@ export default function SDRDashboard() {
   const createCall = useCreateCall();
 
   const [dateRange, setDateRange] = useState<DateRange>('last7days');
+  const [isActiveAccountsModalOpen, setIsActiveAccountsModalOpen] = useState(false);
 
   const handleCall = async (lead: any) => {
     if (!lead.phone) {
@@ -112,7 +114,7 @@ export default function SDRDashboard() {
           <KPICard title="Appointment Setter" value={filteredLeads.filter((l: any) => l.status === 'Meeting Booked').length} icon={CheckCircle} link="/sdr/leads" />
         </div>
         <div className="animate-slide-up stagger-5">
-          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Closed Won').length} icon={Target} link="/sdr/active-accounts" />
+          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Closed Won').length} icon={Target} onClick={() => setIsActiveAccountsModalOpen(true)} />
         </div>
       </div>
 
@@ -254,6 +256,12 @@ export default function SDRDashboard() {
         </div>
         <LeadTable leads={leads} />
       </div>
+
+      <ActiveAccountsListModal
+        isOpen={isActiveAccountsModalOpen}
+        onClose={() => setIsActiveAccountsModalOpen(false)}
+        leads={filteredLeads}
+      />
     </div>
   );
 }

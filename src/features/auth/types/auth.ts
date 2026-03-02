@@ -8,6 +8,9 @@ export interface User {
   role: UserRole;
 }
 
+/** Alias kept in sync with User for components that import from auth.api */
+export type AuthUser = User;
+
 export interface AuthState {
   user: User | null;
   isAuthenticated: boolean;

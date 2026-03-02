@@ -78,13 +78,13 @@ export default function LeadTable({ leads, compact = false }: { leads: Lead[]; c
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Lead Owner</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden lg:table-cell">Location</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden xl:table-cell">Source</th>
-              <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden xl:table-cell">Last Follow-up</th>
+              <th className="text-left px-4 py-3 font-medium text-muted-foreground hidden xl:table-cell">Status</th>
               {!compact && <th className="text-right px-4 py-3 font-medium text-muted-foreground">Action</th>}
             </tr>
           </thead>
           <tbody>
             {leads.map((lead, index) => {
-              const isOverdue = !!(lead.nextFollowUp && lead.nextFollowUp < today && lead.status !== 'Closed Won' && lead.status !== 'Closed Lost');
+              const isOverdue = !!(lead.nextFollowUp && lead.nextFollowUp < today && lead.status !== 'Active Account');
               const companySize = lead.employeeCount;
 
               return (
@@ -101,14 +101,9 @@ export default function LeadTable({ leads, compact = false }: { leads: Lead[]; c
                   </td>
 
                   <td className="px-4 py-3">
-                    <div className="space-y-1">
-                      <Link href={`${basePath}/leads/${lead.id}`} className="font-medium text-foreground hover:text-primary transition-colors">
-                        {lead.name || '—'}
-                      </Link>
-                      <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStageBadgeClass(lead.status)}`}>
-                        {lead.status}
-                      </span>
-                    </div>
+                    <Link href={`${basePath}/leads/${lead.id}`} className="font-medium text-foreground hover:text-primary transition-colors">
+                      {lead.name || '—'}
+                    </Link>
                   </td>
 
                   <td className="px-4 py-3 text-muted-foreground hidden md:table-cell">{formatCompanySize(companySize)}</td>
@@ -136,13 +131,9 @@ export default function LeadTable({ leads, compact = false }: { leads: Lead[]; c
                   </td>
 
                   <td className="px-4 py-3 hidden xl:table-cell">
-                    {lead.nextFollowUp ? (
-                      <span className={`text-xs font-medium ${isOverdue ? 'text-destructive' : 'text-foreground'}`}>
-                        {isOverdue && '⚠ '}{lead.nextFollowUp}
-                      </span>
-                    ) : (
-                      <span className="text-xs text-muted-foreground">—</span>
-                    )}
+                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium ${getStageBadgeClass(lead.status)}`}>
+                      {lead.status}
+                    </span>
                   </td>
 
                   {!compact && (

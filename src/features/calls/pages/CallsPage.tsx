@@ -10,6 +10,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useCalls, useUpdateCall } from '@/hooks/useApi';
+import { useDebounce } from '@/hooks/useDebounce';
 import { toast } from 'sonner';
 
 const statusColors: Record<string, string> = {
@@ -33,6 +34,7 @@ export default function CallsPage() {
   const { data: calls = [], isLoading } = useCalls();
   const updateCall = useUpdateCall();
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [page, setPage] = useState(1);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -43,7 +45,7 @@ export default function CallsPage() {
   const basePath = pathname.startsWith('/sdr') ? '/sdr' : '/admin';
 
   const filtered = calls.filter((c: any) => {
-    const matchSearch = !search || c.leadName.toLowerCase().includes(search.toLowerCase()) || c.agentName.toLowerCase().includes(search.toLowerCase());
+    const matchSearch = !debouncedSearch || c.leadName.toLowerCase().includes(debouncedSearch.toLowerCase()) || c.agentName.toLowerCase().includes(debouncedSearch.toLowerCase());
     const matchStatus = statusFilter === 'all' || c.status === statusFilter;
     return matchSearch && matchStatus;
   });

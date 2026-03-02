@@ -1,69 +1,117 @@
 'use client';
 import { createContext, useContext, useState, ReactNode, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, UserRole } from '@/features/auth/types/auth';
+import { AuthUser } from '@/features/auth/types/auth';
 import { api } from '@/services/api';
 
 interface AuthContextType {
-  user: User | null;
+  user: AuthUser | null;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<{ success: boolean; role?: UserRole; error?: string }>;
+  impersonatedBy: string | null;
+  login: (email: string, password: string) => Promise<{ success: boolean; role?: string; error?: string }>;
   logout: () => void;
+  impersonate: (userId: string) => Promise<{ success: boolean; error?: string }>;
+  exitImpersonation: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
+/** User profile is cached in sessionStorage for display only (no security token stored client-side) */
+const USER_KEY = 'insurelead_user';
+const IMPERSONATED_BY_KEY = 'insurelead_impersonated_by';
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(() => {
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('insurelead_user');
-      return stored ? JSON.parse(stored) : null;
-    }
-    return null;
+
+  const [user, setUser] = useState<AuthUser | null>(() => {
+    if (typeof window === 'undefined') return null;
+    try {
+      const s = sessionStorage.getItem(USER_KEY);
+      return s ? (JSON.parse(s) as AuthUser) : null;
+    } catch { return null; }
   });
 
-  // Verify token on mount
+  const [impersonatedBy, setImpersonatedBy] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    return sessionStorage.getItem(IMPERSONATED_BY_KEY);
+  });
+
+  // On mount: verify the httpOnly cookie is still valid
   useEffect(() => {
-    const token = localStorage.getItem('insurelead_token');
-    if (token && !user) {
-      api.auth.me()
-        .then((u) => {
-          setUser(u);
-          localStorage.setItem('insurelead_user', JSON.stringify(u));
-        })
-        .catch(() => {
-          localStorage.removeItem('insurelead_token');
-          localStorage.removeItem('insurelead_user');
-          document.cookie = 'insurelead_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
-          setUser(null);
-        });
-    }
+    api.auth.me()
+      .then((u) => {
+        setUser(u);
+        sessionStorage.setItem(USER_KEY, JSON.stringify(u));
+      })
+      .catch(() => {
+        // Cookie expired or invalid — clear local state
+        setUser(null);
+        setImpersonatedBy(null);
+        sessionStorage.removeItem(USER_KEY);
+        sessionStorage.removeItem(IMPERSONATED_BY_KEY);
+      });
   }, []);
 
   const login = useCallback(async (email: string, password: string) => {
     try {
       const result = await api.auth.login(email, password);
       setUser(result.user);
-      localStorage.setItem('insurelead_token', result.token);
-      localStorage.setItem('insurelead_user', JSON.stringify(result.user));
-      document.cookie = `insurelead_token=${result.token}; path=/; max-age=604800; samesite=lax`;
-      return { success: true, role: result.user.role as UserRole };
-    } catch (err: any) {
-      return { success: false, error: err.message || 'Invalid email or password' };
+      setImpersonatedBy(null);
+      sessionStorage.setItem(USER_KEY, JSON.stringify(result.user));
+      sessionStorage.removeItem(IMPERSONATED_BY_KEY);
+      return { success: true, role: result.user.role };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Invalid email or password';
+      return { success: false, error: msg };
     }
   }, []);
 
-  const logout = useCallback(() => {
+  const logout = useCallback(async () => {
+    try { await api.auth.logout(); } catch { /* ignore */ }
     setUser(null);
-    localStorage.removeItem('insurelead_token');
-    localStorage.removeItem('insurelead_user');
-    document.cookie = 'insurelead_token=; path=/; expires=Thu, 01 Jan 1970 00:00:00 GMT';
+    setImpersonatedBy(null);
+    sessionStorage.removeItem(USER_KEY);
+    sessionStorage.removeItem(IMPERSONATED_BY_KEY);
     router.push('/login');
   }, [router]);
 
+  const impersonate = useCallback(async (userId: string) => {
+    try {
+      const result = await api.auth.impersonate(userId);
+      setUser(result.user);
+      const by = result.impersonatedBy ?? null;
+      setImpersonatedBy(by);
+      sessionStorage.setItem(USER_KEY, JSON.stringify(result.user));
+      if (by) sessionStorage.setItem(IMPERSONATED_BY_KEY, by);
+      return { success: true };
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Impersonation failed';
+      return { success: false, error: msg };
+    }
+  }, []);
+
+  /** Restore the original admin session without requiring re-login */
+  const exitImpersonation = useCallback(async () => {
+    try {
+      const result = await api.auth.exitImpersonation();
+      setUser(result.user);
+      setImpersonatedBy(null);
+      sessionStorage.setItem(USER_KEY, JSON.stringify(result.user));
+      sessionStorage.removeItem(IMPERSONATED_BY_KEY);
+      router.push('/admin');
+    } catch {
+      // Backup cookie expired — fall back to full logout
+      try { await api.auth.logout(); } catch { /* ignore */ }
+      setUser(null);
+      setImpersonatedBy(null);
+      sessionStorage.removeItem(USER_KEY);
+      sessionStorage.removeItem(IMPERSONATED_BY_KEY);
+      router.push('/login');
+    }
+  }, [router]);
+
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, login, logout }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, impersonatedBy, login, logout, impersonate, exitImpersonation }}>
       {children}
     </AuthContext.Provider>
   );
@@ -76,4 +124,3 @@ export function useAuth() {
   }
   return context;
 }
-

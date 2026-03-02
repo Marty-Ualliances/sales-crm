@@ -3,6 +3,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { AuthProvider } from '@/features/auth/context/AuthContext';
+import { ThemeProvider } from 'next-themes';
 import { useState } from 'react';
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -17,11 +18,13 @@ export function Providers({ children }: { children: React.ReactNode }) {
 
     return (
         <QueryClientProvider client={queryClient}>
-            <TooltipProvider delayDuration={300}>
-                <AuthProvider>
-                    {children}
-                </AuthProvider>
-            </TooltipProvider>
+            <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
+                <TooltipProvider delayDuration={300}>
+                    <AuthProvider>
+                        {children}
+                    </AuthProvider>
+                </TooltipProvider>
+            </ThemeProvider>
         </QueryClientProvider>
     );
 }

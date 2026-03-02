@@ -7,6 +7,7 @@ import { useLeads, useAgents } from '@/hooks/useApi';
 import DateFilter, { DateRange, filterByDateRange } from '@/components/common/DateFilter';
 import { useState } from 'react';
 import { useAuth } from '@/features/auth/context/AuthContext';
+import { ActiveAccountsListModal } from '../../leads/components/ActiveAccountsListModal';
 
 export default function LeadGenDashboard() {
   const { user } = useAuth();
@@ -14,6 +15,7 @@ export default function LeadGenDashboard() {
   const { data: agents = [] } = useAgents();
 
   const [dateRange, setDateRange] = useState<DateRange>('last7days');
+  const [isActiveAccountsModalOpen, setIsActiveAccountsModalOpen] = useState(false);
   const leads = user?.role === 'admin' ? allLeads : allLeads.filter((l: any) => l.addedBy === user?.name);
   const filteredLeads = filterByDateRange(leads, dateRange);
 
@@ -81,7 +83,7 @@ export default function LeadGenDashboard() {
           <KPICard title="Appointment Setter" value={filteredLeads.filter((l: any) => l.status === 'Meeting Booked').length} icon={UserCheck} link="/leadgen/leads" />
         </div>
         <div className="animate-slide-up stagger-5">
-          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Closed Won').length} icon={UserCheck} link="/leadgen/leads" />
+          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Closed Won').length} icon={UserCheck} onClick={() => setIsActiveAccountsModalOpen(true)} />
         </div>
       </div>
 
@@ -165,6 +167,12 @@ export default function LeadGenDashboard() {
           </Button>
         </div>
       </div>
+
+      <ActiveAccountsListModal
+        isOpen={isActiveAccountsModalOpen}
+        onClose={() => setIsActiveAccountsModalOpen(false)}
+        leads={filteredLeads}
+      />
     </div>
   );
 }

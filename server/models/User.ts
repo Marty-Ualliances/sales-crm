@@ -13,7 +13,8 @@ export interface IUser extends Document {
   followUpsPending: number;
   conversionRate: number;
   revenueClosed: number;
-  resetToken?: string;
+  /** SHA-256 hash of the password-reset token (never store plaintext) */
+  resetTokenHash?: string;
   resetTokenExpiry?: Date;
   comparePassword(candidatePassword: string): Promise<boolean>;
 }
@@ -31,7 +32,7 @@ const UserSchema = new Schema<IUser>(
     followUpsPending: { type: Number, default: 0 },
     conversionRate: { type: Number, default: 0 },
     revenueClosed: { type: Number, default: 0 },
-    resetToken: { type: String, default: undefined },
+    resetTokenHash: { type: String, default: undefined },
     resetTokenExpiry: { type: Date, default: undefined },
   },
   { timestamps: true }
@@ -48,9 +49,12 @@ UserSchema.methods.comparePassword = async function (candidatePassword: string) 
 };
 
 UserSchema.set('toJSON', {
-  transform: (_doc, ret: any) => {
-    ret.id = ret._id.toString();
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  transform: (_doc: any, ret: any) => {
+    ret.id = ret._id?.toString();
     delete ret.password;
+    delete ret.resetTokenHash;
+    delete ret.resetTokenExpiry;
     delete ret.__v;
     return ret;
   },

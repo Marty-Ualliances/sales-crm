@@ -2,8 +2,10 @@
 
 import { useLeads } from '@/hooks/useApi';
 import { Badge } from '@/components/ui/badge';
-import { Loader2 } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Loader2, Download } from 'lucide-react';
 import { PIPELINE_STAGES, getStageColor } from '@/features/leads/constants/pipeline';
+import * as XLSX from 'xlsx';
 
 export default function PipelinePage() {
   const { data: leads = [], isLoading } = useLeads();
@@ -16,11 +18,38 @@ export default function PipelinePage() {
     );
   }
 
+  const handleExport = () => {
+    const exportData = leads.map((lead: any) => ({
+      Name: lead.name,
+      Company: lead.companyName || '',
+      Phone: lead.phone || lead.workDirectPhone || '',
+      Email: lead.email || '',
+      Status: lead.status,
+      AssignedAgent: lead.assignedAgent || 'Unassigned',
+      CallCount: lead.callCount || 0,
+      Source: lead.source || '',
+      Location: [lead.city, lead.state].filter(Boolean).join(', ') || ''
+    }));
+
+    const worksheet = XLSX.utils.json_to_sheet(exportData);
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Pipeline');
+
+    const date = new Date().toISOString().split('T')[0];
+    XLSX.writeFile(workbook, `Pipeline_Export_${date}.xlsx`);
+  };
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-foreground">Sales Pipeline</h1>
-        <p className="text-sm text-muted-foreground mt-1">Kanban view of your lead funnel</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">Sales Pipeline</h1>
+          <p className="text-sm text-muted-foreground mt-1">Kanban view of your lead funnel</p>
+        </div>
+        <Button onClick={handleExport} variant="outline" className="flex items-center gap-2">
+          <Download className="h-4 w-4" />
+          Export Pipeline
+        </Button>
       </div>
       <div className="flex gap-4 overflow-x-auto pb-4">
         {PIPELINE_STAGES.map(stage => {

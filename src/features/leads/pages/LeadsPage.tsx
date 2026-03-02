@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpDown, Loader2, Search, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLeads, useAgents } from '@/hooks/useApi';
+import { useDebounce } from '@/hooks/useDebounce';
 import LeadTable from '@/components/common/LeadTable';
 
 const PAGE_SIZE = 25;
@@ -79,6 +80,7 @@ export default function LeadsPage() {
   const { data: agents = [] } = useAgents();
 
   const [search, setSearch] = useState('');
+  const debouncedSearch = useDebounce(search, 300);
   const [stateFilter, setStateFilter] = useState('all');
   const [sizeFilter, setSizeFilter] = useState<CompanySizeRange>('all');
   const [ownerFilter, setOwnerFilter] = useState('all');
@@ -118,7 +120,7 @@ export default function LeadsPage() {
   }, [leads]);
 
   const filteredAndSorted = useMemo(() => {
-    const query = search.trim().toLowerCase();
+    const query = debouncedSearch.trim().toLowerCase();
 
     const filtered = leads.filter((lead: any) => {
       const matchSearch =
@@ -154,7 +156,7 @@ export default function LeadsPage() {
     });
 
     return filtered;
-  }, [leads, ownerFilter, search, sizeFilter, sortBy, sourceFilter, stateFilter, statusFilter]);
+  }, [leads, ownerFilter, debouncedSearch, sizeFilter, sortBy, sourceFilter, stateFilter, statusFilter]);
 
   const totalPages = Math.max(1, Math.ceil(filteredAndSorted.length / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
