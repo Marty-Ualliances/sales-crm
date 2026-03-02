@@ -35,7 +35,7 @@ const app = express();
 const httpServer = http.createServer(app);
 
 // ── Trust reverse proxy chain (Railway/edge/load balancer) ──
-app.set('trust proxy', true);
+app.set('trust proxy', isProduction ? 1 : false);
 
 // ── Attach Socket.IO ──
 initIO(httpServer);
@@ -66,11 +66,19 @@ const parsedOrigins = allowedOriginsString
   .map(url => url.trim().replace(/\/$/, ''))
   .filter(url => url.length > 0);
 
+const inferredOrigins = [
+  env.APP_URL?.trim().replace(/\/$/, ''),
+  process.env.RAILWAY_PUBLIC_DOMAIN ? `https://${process.env.RAILWAY_PUBLIC_DOMAIN.trim().replace(/\/$/, '')}` : undefined,
+].filter((origin): origin is string => Boolean(origin));
+
+const allowedOrigins = Array.from(new Set([...parsedOrigins, ...inferredOrigins]));
+
 const corsOptions = {
   origin: isProduction
     ? (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
       // Allow: no origin (same-origin/SSR), or exact match from ALLOWED_ORIGINS
-      if (!origin || parsedOrigins.includes(origin)) {
+      const normalizedOrigin = origin?.trim().replace(/\/$/, '');
+      if (!normalizedOrigin || allowedOrigins.includes(normalizedOrigin)) {
         callback(null, true);
       } else {
         console.error(`CORS BLOCKED Origin: ${origin}`);
