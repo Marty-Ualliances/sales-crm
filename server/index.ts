@@ -101,7 +101,14 @@ function sanitize(obj: any): any {
 }
 app.use((req: Request, _res: Response, nextMiddleware: NextFunction) => {
   if (req.body && typeof req.body === 'object') req.body = sanitize(req.body);
-  if (req.query && typeof req.query === 'object') req.query = sanitize(req.query);
+  if (req.query && typeof req.query === 'object') {
+    const sanitizedQuery = sanitize(req.query as Record<string, unknown>);
+    const queryObj = req.query as Record<string, unknown>;
+    for (const key of Object.keys(queryObj)) {
+      delete queryObj[key];
+    }
+    Object.assign(queryObj, sanitizedQuery);
+  }
   if (req.params && typeof req.params === 'object') {
     for (const key of Object.keys(req.params)) {
       if (typeof req.params[key] === 'string' && req.params[key].startsWith('$')) {
