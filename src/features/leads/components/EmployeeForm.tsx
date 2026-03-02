@@ -1,9 +1,13 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Employee, EmployeePhone } from '@/features/leads/types/leads';
+
+interface PhoneWithId extends EmployeePhone {
+  _uid: string;
+}
 
 interface EmployeeFormProps {
   initial?: Partial<Employee>;
@@ -28,15 +32,21 @@ const PHONE_TYPE_LABELS: Record<EmployeePhone['type'], string> = {
 };
 
 export function EmployeeForm({ initial, onSave, onCancel }: EmployeeFormProps) {
+  const uidCounter = useRef(0);
+  const genUid = () => `phone_${++uidCounter.current}_${Date.now()}`;
+
   const [name, setName] = useState(initial?.name ?? '');
   const [email, setEmail] = useState(initial?.email ?? '');
   const [linkedin, setLinkedin] = useState(initial?.linkedin ?? '');
+  const [linkedinError, setLinkedinError] = useState('');
   const [isDecisionMaker, setIsDecisionMaker] = useState(initial?.isDecisionMaker ?? false);
   const [leftOrganization, setLeftOrganization] = useState(initial?.leftOrganization ?? false);
-  const [phones, setPhones] = useState<EmployeePhone[]>(initial?.phones ?? []);
+  const [phones, setPhones] = useState<PhoneWithId[]>(
+    (initial?.phones ?? []).map((p) => ({ ...p, _uid: genUid() }))
+  );
 
   const addPhone = () => {
-    setPhones((previous) => [...previous, { type: 'direct', number: '', extension: '' }]);
+    setPhones((previous) => [...previous, { type: 'direct', number: '', extension: '', _uid: genUid() }]);
   };
 
   const removePhone = (index: number) => {
@@ -62,15 +72,23 @@ export function EmployeeForm({ initial, onSave, onCancel }: EmployeeFormProps) {
       return;
     }
 
+    // Validate LinkedIn URL to prevent javascript: XSS
+    const trimmedLinkedin = linkedin.trim();
+    if (trimmedLinkedin && !/^https?:\/\//i.test(trimmedLinkedin)) {
+      setLinkedinError('LinkedIn URL must start with http:// or https://');
+      return;
+    }
+    setLinkedinError('');
+
     onSave({
       name: name.trim(),
       email: email.trim(),
-      linkedin: linkedin.trim() || undefined,
+      linkedin: trimmedLinkedin || undefined,
       isDecisionMaker,
       leftOrganization,
       phones: phones
         .map((phone) => ({
-          ...phone,
+          type: phone.type,
           number: phone.number.trim(),
           extension: phone.extension?.trim() || undefined,
         }))
@@ -108,12 +126,16 @@ export function EmployeeForm({ initial, onSave, onCancel }: EmployeeFormProps) {
       <div>
         <label className="block text-xs font-medium text-muted-foreground mb-1">LinkedIn</label>
         <input
-          type="text"
+          type="url"
           value={linkedin}
-          onChange={(event) => setLinkedin(event.target.value)}
+          onChange={(event) => {
+            setLinkedin(event.target.value);
+            setLinkedinError('');
+          }}
           placeholder="https://linkedin.com/in/..."
           className="w-full h-9 rounded-lg border border-input bg-background px-3 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
         />
+        {linkedinError && <p className="text-xs text-destructive mt-1">{linkedinError}</p>}
       </div>
 
       <div>
@@ -131,7 +153,7 @@ export function EmployeeForm({ initial, onSave, onCancel }: EmployeeFormProps) {
 
         <div className="space-y-2">
           {phones.map((phone, index) => (
-            <div key={`${index}-${phone.type}`} className="flex items-center gap-2">
+            <div key={phone._uid} className="flex items-center gap-2">
               <select
                 value={phone.type}
                 onChange={(event) =>

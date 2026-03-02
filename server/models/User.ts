@@ -13,6 +13,8 @@ export interface IUser extends Document {
   followUpsPending: number;
   conversionRate: number;
   revenueClosed: number;
+  /** Token version — incremented on password change to invalidate all existing JWTs */
+  tokenVersion: number;
   /** SHA-256 hash of the password-reset token (never store plaintext) */
   resetTokenHash?: string;
   resetTokenExpiry?: Date;
@@ -32,6 +34,7 @@ const UserSchema = new Schema<IUser>(
     followUpsPending: { type: Number, default: 0 },
     conversionRate: { type: Number, default: 0 },
     revenueClosed: { type: Number, default: 0 },
+    tokenVersion: { type: Number, default: 0 },
     resetTokenHash: { type: String, default: undefined },
     resetTokenExpiry: { type: Date, default: undefined },
   },
@@ -40,6 +43,8 @@ const UserSchema = new Schema<IUser>(
 
 UserSchema.pre('save', async function () {
   if (!this.isModified('password')) return;
+  // Increment tokenVersion to invalidate all existing JWTs
+  this.tokenVersion = (this.tokenVersion || 0) + 1;
   const salt = await bcrypt.genSalt(12);
   this.password = await bcrypt.hash(this.password, salt);
 });

@@ -8,7 +8,7 @@ const router = Router();
 router.get('/', auth, async (req: AuthRequest, res: Response) => {
   try {
     const { assignedTo, status, from, to, priority } = req.query;
-    const filter: any = {};
+    const filter: Record<string, any> = {};
 
     if (assignedTo) filter.assignedTo = assignedTo;
     if (status) filter.status = status;
@@ -74,7 +74,15 @@ router.post('/', auth, async (req: AuthRequest, res: Response) => {
 // PUT /api/tasks/:id — update task
 router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
   try {
-    const updates = { ...req.body };
+    // Whitelist allowed fields to prevent mass assignment
+    const TASK_WRITABLE_FIELDS = [
+      'title', 'description', 'dueDate', 'priority', 'status',
+      'assignedTo', 'leadId', 'leadName', 'category',
+    ];
+    const updates: Record<string, any> = {};
+    for (const key of TASK_WRITABLE_FIELDS) {
+      if (req.body[key] !== undefined) updates[key] = req.body[key];
+    }
 
     // If marking as completed, set completedAt
     if (updates.status === 'completed' && !updates.completedAt) {

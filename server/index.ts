@@ -44,7 +44,20 @@ initIO(httpServer);
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   crossOriginOpenerPolicy: false,
-  contentSecurityPolicy: false, // Disabled for Next.js
+  contentSecurityPolicy: {
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],  // Next.js requires these
+      styleSrc: ["'self'", "'unsafe-inline'"],
+      imgSrc: ["'self'", "data:", "https:"],
+      connectSrc: ["'self'", "wss:", "ws:"],
+      fontSrc: ["'self'", "data:"],
+      objectSrc: ["'none'"],
+      frameAncestors: ["'none'"],
+      baseUri: ["'self'"],
+      formAction: ["'self'"],
+    },
+  },
 }));
 
 const allowedOriginsString = env.ALLOWED_ORIGINS || '';
@@ -56,18 +69,12 @@ const parsedOrigins = allowedOriginsString
 const corsOptions = {
   origin: isProduction
     ? (origin: string | undefined, callback: (err: Error | null, allow?: boolean) => void) => {
-      // Allow: no origin (same-origin/SSR), configured origins, railway.app, localhost
-      if (
-        !origin ||
-        parsedOrigins.includes(origin) ||
-        origin.includes('railway.app') ||
-        origin.includes('localhost') ||
-        origin.includes('127.0.0.1')
-      ) {
+      // Allow: no origin (same-origin/SSR), or exact match from ALLOWED_ORIGINS
+      if (!origin || parsedOrigins.includes(origin)) {
         callback(null, true);
       } else {
         console.error(`CORS BLOCKED Origin: ${origin}`);
-        callback(null, false); // Reject without throwing (avoids 500)
+        callback(null, false);
       }
     }
     : true,
@@ -94,6 +101,7 @@ function sanitize(obj: any): any {
 }
 app.use((req: Request, _res: Response, nextMiddleware: NextFunction) => {
   if (req.body && typeof req.body === 'object') req.body = sanitize(req.body);
+  if (req.query && typeof req.query === 'object') req.query = sanitize(req.query);
   if (req.params && typeof req.params === 'object') {
     for (const key of Object.keys(req.params)) {
       if (typeof req.params[key] === 'string' && req.params[key].startsWith('$')) {

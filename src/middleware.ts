@@ -1,10 +1,11 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
+import { jwtVerify } from 'jose';
 
 // Routes that do NOT require authentication
 const PUBLIC_PATHS = ['/', '/login', '/forgot-password', '/reset-password'];
 
-export function middleware(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
   const isPublic = PUBLIC_PATHS.some(
@@ -12,11 +13,24 @@ export function middleware(request: NextRequest) {
   );
 
   if (!isPublic) {
-    const token = request.cookies.get('insurelead_access');
+    const token = request.cookies.get('insurelead_access')?.value;
     if (!token) {
       const loginUrl = new URL('/login', request.url);
       loginUrl.searchParams.set('returnUrl', pathname);
       return NextResponse.redirect(loginUrl);
+    }
+
+    // Cryptographically verify JWT signature and expiration
+    const secret = process.env.JWT_SECRET;
+    if (secret) {
+      try {
+        await jwtVerify(token, new TextEncoder().encode(secret));
+      } catch {
+        // Invalid or expired token — redirect to login
+        const loginUrl = new URL('/login', request.url);
+        loginUrl.searchParams.set('returnUrl', pathname);
+        return NextResponse.redirect(loginUrl);
+      }
     }
   }
 

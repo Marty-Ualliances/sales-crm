@@ -14,8 +14,18 @@ FROM base AS builder
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 
-RUN npm run build \
- && (npm run build:server || npx tsc -p tsconfig.json)
+# Build Next.js frontend
+RUN npm run build
+
+# Bundle server TypeScript into a single ESM file using esbuild (avoids tsx at runtime)
+RUN npx esbuild server/index.ts \
+      --bundle \
+      --platform=node \
+      --format=esm \
+      --target=node20 \
+      --outfile=dist/server.mjs \
+      --packages=external \
+      --sourcemap=inline
 
 FROM base AS prod-deps
 COPY package*.json ./
@@ -38,10 +48,12 @@ COPY --from=builder /app/.next ./.next
 COPY --from=builder /app/public ./public
 COPY --from=builder /app/next.config.* ./
 
-COPY --from=builder /app/server ./server
+# Copy pre-compiled server bundle (no tsx needed at runtime)
+COPY --from=builder /app/dist ./dist
 
-EXPOSE 3000
+EXPOSE 3001
 
 USER nextjs
 
-CMD ["sh", "-c", "PORT=3001 npx tsx server/index.ts & BACK_PID=$!; npx next start -p 3000 & FRONT_PID=$!; trap 'kill -TERM $BACK_PID $FRONT_PID 2>/dev/null' TERM INT; wait -n $BACK_PID $FRONT_PID; kill -TERM $BACK_PID $FRONT_PID 2>/dev/null; wait"]
+# Single unified server (Express + Next.js) — no separate 'next start' process
+CMD ["node", "dist/server.mjs"]

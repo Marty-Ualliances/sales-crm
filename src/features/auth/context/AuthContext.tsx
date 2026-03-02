@@ -23,21 +23,22 @@ const IMPERSONATED_BY_KEY = 'insurelead_impersonated_by';
 export function AuthProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
 
-  const [user, setUser] = useState<AuthUser | null>(() => {
-    if (typeof window === 'undefined') return null;
-    try {
-      const s = sessionStorage.getItem(USER_KEY);
-      return s ? (JSON.parse(s) as AuthUser) : null;
-    } catch { return null; }
-  });
+  // Initialize to null universally to prevent SSR/client hydration mismatch.
+  // sessionStorage is loaded only in useEffect (client-side).
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const [impersonatedBy, setImpersonatedBy] = useState<string | null>(null);
 
-  const [impersonatedBy, setImpersonatedBy] = useState<string | null>(() => {
-    if (typeof window === 'undefined') return null;
-    return sessionStorage.getItem(IMPERSONATED_BY_KEY);
-  });
-
-  // On mount: verify the httpOnly cookie is still valid
+  // On mount: restore from sessionStorage, then verify with server
   useEffect(() => {
+    // Hydrate from sessionStorage for instant UI
+    try {
+      const stored = sessionStorage.getItem(USER_KEY);
+      if (stored) setUser(JSON.parse(stored) as AuthUser);
+      const storedImpersonation = sessionStorage.getItem(IMPERSONATED_BY_KEY);
+      if (storedImpersonation) setImpersonatedBy(storedImpersonation);
+    } catch { /* ignore */ }
+
+    // Verify the httpOnly cookie is still valid
     api.auth.me()
       .then((u) => {
         setUser(u);

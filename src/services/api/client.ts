@@ -1,5 +1,17 @@
-const API_BASE = '/api';
+const API_ORIGIN = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') || '';
+const API_BASE = API_ORIGIN ? `${API_ORIGIN}/api` : '/api';
 const REQUEST_TIMEOUT = 30_000; // 30 seconds
+
+const NO_REFRESH_RETRY_ENDPOINTS = [
+    '/auth/login',
+    '/auth/refresh',
+    '/auth/forgot-password',
+    '/auth/reset-password',
+];
+
+function shouldSkipRefreshRetry(endpoint: string): boolean {
+    return NO_REFRESH_RETRY_ENDPOINTS.some((p) => endpoint.startsWith(p));
+}
 
 let refreshPromise: Promise<void> | null = null;
 
@@ -47,7 +59,7 @@ export async function request<T>(
             signal: controller.signal,
         });
 
-        if (res.status === 401 && !isRetry && !endpoint.includes('/auth/refresh')) {
+        if (res.status === 401 && !isRetry && !shouldSkipRefreshRetry(endpoint)) {
             // Attempt silent refresh then retry once
             try {
                 await tryRefresh();
@@ -59,8 +71,12 @@ export async function request<T>(
         }
 
         if (res.status === 401) {
-            redirectToLogin();
-            throw new Error('Unauthorized');
+            const body = await res.json().catch(() => ({}));
+            const message = (body as { error?: string }).error || 'Unauthorized';
+            if (!shouldSkipRefreshRetry(endpoint)) {
+                redirectToLogin();
+            }
+            throw new Error(message);
         }
 
         if (!res.ok) {

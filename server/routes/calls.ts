@@ -5,11 +5,22 @@ import { z } from 'zod';
 
 const router = Router();
 
+/** Escape special regex characters to prevent ReDoS */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Allowed fields for call creation to prevent mass assignment */
+const CALL_WRITABLE_FIELDS = [
+  'leadId', 'leadName', 'agentName', 'date', 'time', 'duration',
+  'status', 'notes', 'hasRecording', 'recordingUrl', 'recordingFlagged',
+];
+
 // GET /api/calls
 router.get('/', auth, async (req: AuthRequest, res: Response) => {
   try {
     const { status, search } = req.query;
-    const filter: any = {};
+    const filter: Record<string, any> = {};
 
     if (req.user!.role === 'sdr') {
       const User = (await import('../models/User')).default;
@@ -19,7 +30,7 @@ router.get('/', auth, async (req: AuthRequest, res: Response) => {
 
     if (status && status !== 'all') filter.status = status;
     if (search) {
-      const s = String(search);
+      const s = escapeRegex(String(search));
       filter.$or = [
         { leadName: { $regex: s, $options: 'i' } },
         { notes: { $regex: s, $options: 'i' } },
@@ -47,7 +58,11 @@ router.get('/:id', auth, async (req: AuthRequest, res: Response) => {
 // POST /api/calls
 router.post('/', auth, async (req: AuthRequest, res: Response) => {
   try {
-    const data = { ...req.body };
+    // Whitelist allowed fields to prevent mass assignment
+    const data: Record<string, any> = {};
+    for (const key of CALL_WRITABLE_FIELDS) {
+      if (req.body[key] !== undefined) data[key] = req.body[key];
+    }
 
     // Auto-flag for recording if call >5 minutes
     const durationStr = String(data.duration || '0 min');
@@ -161,7 +176,7 @@ router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
 // GET /api/calls/recordings — list only calls with recordings or flagged
 router.get('/recordings', auth, async (req: AuthRequest, res: Response) => {
   try {
-    const filter: any = { $or: [{ hasRecording: true }, { recordingFlagged: true }] };
+    const filter: Record<string, any> = { $or: [{ hasRecording: true }, { recordingFlagged: true }] };
     if (req.user!.role === 'sdr') {
       const User = (await import('../models/User')).default;
       const user = await User.findById(req.user!.id);

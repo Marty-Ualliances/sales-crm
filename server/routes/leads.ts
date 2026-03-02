@@ -12,6 +12,29 @@ function emitLeadChange(action: string, data?: Record<string, unknown>) {
   try { emitLeadChangedToRoles(action, data); } catch (_) { }
 }
 
+/** Escape special regex characters in a user-supplied string to prevent ReDoS */
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/** Allowed fields for lead creation/update to prevent mass assignment */
+const LEAD_WRITABLE_FIELDS = [
+  'name', 'title', 'companyName', 'email', 'workDirectPhone', 'homePhone',
+  'mobilePhone', 'corporatePhone', 'otherPhone', 'companyPhone', 'employeeCount',
+  'employees', 'personLinkedinUrl', 'website', 'companyLinkedinUrl', 'address',
+  'city', 'state', 'status', 'assignedAgent', 'assignedVA', 'notes',
+  'nextFollowUp', 'source', 'priority', 'segment', 'sourceChannel', 'date',
+  'activeServiceDate', 'contractSignDate', 'qualification', 'cadence',
+];
+
+function pickAllowedFields(body: Record<string, any>, allowed: string[]): Record<string, any> {
+  const clean: Record<string, any> = {};
+  for (const key of allowed) {
+    if (body[key] !== undefined) clean[key] = body[key];
+  }
+  return clean;
+}
+
 const router = Router();
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -57,7 +80,7 @@ function parseSpreadsheet(buffer: Buffer, filename: string): { headers: string[]
 router.get('/', auth, async (req: AuthRequest, res: Response) => {
   try {
     const { status, search, agent } = req.query;
-    const filter: any = {};
+    const filter: Record<string, any> = {};
 
     if (req.user?.role === 'sdr') {
       const User = (await import('../models/User')).default;
@@ -70,7 +93,7 @@ router.get('/', auth, async (req: AuthRequest, res: Response) => {
 
     if (status && status !== 'all') filter.status = status;
     if (search) {
-      const s = String(search);
+      const s = escapeRegex(String(search));
       filter.$or = [
         { name: { $regex: s, $options: 'i' } },
         { email: { $regex: s, $options: 'i' } },
@@ -82,8 +105,16 @@ router.get('/', auth, async (req: AuthRequest, res: Response) => {
       ];
     }
 
-    const leads = await Lead.find(filter).sort({ lastActivity: -1 });
-    res.json(leads);
+    // Paginate to prevent unbounded queries — default 200, max 500
+    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
+    const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit || '200'), 10) || 200));
+    const skip = (page - 1) * limit;
+
+    const [leads, total] = await Promise.all([
+      Lead.find(filter).sort({ lastActivity: -1 }).skip(skip).limit(limit),
+      Lead.countDocuments(filter),
+    ]);
+    res.json({ leads, total, page, limit });
   } catch (err) {
     console.error('Get leads error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -93,7 +124,7 @@ router.get('/', auth, async (req: AuthRequest, res: Response) => {
 // GET /api/leads/kpis
 router.get('/kpis', auth, async (req: AuthRequest, res: Response) => {
   try {
-    const filter: any = {};
+    const filter: Record<string, any> = {};
     if (req.user?.role === 'sdr') {
       const User = (await import('../models/User')).default;
       const user = await User.findById(req.user.id);
@@ -192,7 +223,8 @@ router.post('/', auth, async (req: AuthRequest, res: Response) => {
   try {
     const User = (await import('../models/User')).default;
     const currentUser = req.user?.id ? await User.findById(req.user.id) : null;
-    const lead = new Lead({ ...req.body, addedBy: currentUser?.name || 'Unknown' });
+    const sanitizedBody = pickAllowedFields(req.body, LEAD_WRITABLE_FIELDS);
+    const lead = new Lead({ ...sanitizedBody, addedBy: currentUser?.name || 'Unknown' });
     await lead.save();
 
     // Create notification for new lead
@@ -472,32 +504,37 @@ router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
   try {
     const oldLead = await Lead.findById(req.params.id);
 
+    // Whitelist allowed fields to prevent mass assignment
+    const updateBody = pickAllowedFields(req.body, LEAD_WRITABLE_FIELDS);
+
     // Track who closed the lead
-    if (req.body.status === 'Active Account' && oldLead && oldLead.status !== 'Active Account') {
+    if (updateBody.status === 'Active Account' && oldLead && oldLead.status !== 'Active Account') {
       const User = (await import('../models/User')).default;
       const currentUser = req.user?.id ? await User.findById(req.user.id) : null;
-      req.body.closedBy = currentUser?.name || 'Unknown';
-      req.body.closedAt = new Date();
+      updateBody.closedBy = currentUser?.name || 'Unknown';
+      updateBody.closedAt = new Date();
     }
 
     // Push stageHistory entry on status change
-    if (oldLead && req.body.status && oldLead.status !== req.body.status) {
+    const updateQuery: Record<string, any> = { ...updateBody };
+    if (oldLead && updateBody.status && oldLead.status !== updateBody.status) {
       const User2 = (await import('../models/User')).default;
       const currentUser2 = req.user?.id ? await User2.findById(req.user.id) : null;
-      if (!req.body.$push) req.body.$push = {};
-      req.body.$push.stageHistory = {
-        stage: req.body.status,
-        enteredAt: new Date(),
-        agent: currentUser2?.name || 'Unknown',
+      updateQuery.$push = {
+        stageHistory: {
+          stage: updateBody.status,
+          enteredAt: new Date(),
+          agent: currentUser2?.name || 'Unknown',
+        },
       };
     }
 
-    const lead = await Lead.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const lead = await Lead.findByIdAndUpdate(req.params.id, updateQuery, { new: true });
     if (!lead) return res.status(404).json({ error: 'Lead not found' });
 
     // Create notification for status change (scoped to this user)
-    if (oldLead && req.body.status && oldLead.status !== req.body.status && req.user?.id) {
-      await notifyLeadStatusChange(lead._id.toString(), lead.name, oldLead.status, req.body.status, req.user.id);
+    if (oldLead && updateBody.status && oldLead.status !== updateBody.status && req.user?.id) {
+      await notifyLeadStatusChange(lead._id.toString(), lead.name, oldLead.status, updateBody.status, req.user.id);
     }
     emitLeadChange('updated', { leadId: lead._id });
     res.json(lead);

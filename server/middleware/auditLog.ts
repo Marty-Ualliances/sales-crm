@@ -27,10 +27,17 @@ export const auditLogMiddleware = async (req: Request, res: Response, next: Next
     let entityId = req.params.id || req.params.leadId || req.body.id || req.body.leadId;
 
     // Track the original send method to capture the new value (the response body)
+    // Limit capture to 64KB to prevent memory bloat from large responses
+    const MAX_CAPTURE_SIZE = 64 * 1024;
     const originalSend = res.send;
     let responseBody: any;
     res.send = function (body) {
-        responseBody = body;
+        if (typeof body === 'string' && body.length <= MAX_CAPTURE_SIZE) {
+            responseBody = body;
+        } else if (Buffer.isBuffer(body) && body.length <= MAX_CAPTURE_SIZE) {
+            responseBody = body.toString('utf-8');
+        }
+        // Skip capture for oversized responses
         return originalSend.apply(this, arguments as any);
     };
 
@@ -51,7 +58,7 @@ export const auditLogMiddleware = async (req: Request, res: Response, next: Next
             }
         }
 
-        res.on('finish', async () => {
+        res.on('finish', () => {
             // Only log successful modifications
             if (res.statusCode >= 200 && res.statusCode < 300) {
                 let newValue = undefined;
@@ -68,7 +75,8 @@ export const auditLogMiddleware = async (req: Request, res: Response, next: Next
                 const userId = (req as any).user?.id || (req as any).user?._id || 'anonymous';
                 const userEmail = (req as any).user?.email || 'anonymous';
 
-                await AuditLog.create({
+                // Fire-and-forget with explicit error handling to prevent unhandled rejections
+                AuditLog.create({
                     action,
                     userId,
                     adminId: userId, // Backwards compat
@@ -80,6 +88,8 @@ export const auditLogMiddleware = async (req: Request, res: Response, next: Next
                     newValue,
                     ip: req.ip,
                     targetId: entityId
+                }).catch((err) => {
+                    console.error('Audit log write failed:', err.message);
                 });
             }
         });

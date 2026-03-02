@@ -19,7 +19,9 @@ function getJwtSecret(): string {
 }
 
 function getRefreshSecret(): string {
-  return (env.JWT_REFRESH_SECRET || env.JWT_SECRET) + '_refresh';
+  if (env.JWT_REFRESH_SECRET) return env.JWT_REFRESH_SECRET;
+  // Derive via HMAC to maintain cryptographic isolation from the primary secret
+  return crypto.createHmac('sha256', env.JWT_SECRET).update('refresh_token_secret').digest('hex');
 }
 
 /** Set both httpOnly cookies: access (15 min) + refresh (7 days) */
@@ -51,12 +53,16 @@ function clearAuthCookies(res: Response) {
 
 const BACKUP_SECRET_SUFFIX = '_admin_backup';
 
+function getAdminBackupSecret(): string {
+  return crypto.createHmac('sha256', getJwtSecret()).update('admin_backup_secret').digest('hex');
+}
+
 function setAdminBackupCookie(res: Response, adminId: string, adminEmail: string) {
   const secure = IS_PROD;
   const sameSite = IS_PROD ? ('strict' as const) : ('lax' as const);
   const token = jwt.sign(
     { adminId, adminEmail },
-    getJwtSecret() + BACKUP_SECRET_SUFFIX,
+    getAdminBackupSecret(),
     { expiresIn: '2h' },
   );
   res.cookie('insurelead_admin_backup', token, {
@@ -72,9 +78,9 @@ function clearAdminBackupCookie(res: Response) {
   res.clearCookie('insurelead_admin_backup', { path: '/api/auth/exit-impersonation' });
 }
 
-function issueTokenPair(payload: { id: string; role: string; email: string; name?: string; impersonatedBy?: string }) {
+function issueTokenPair(payload: { id: string; role: string; email: string; name?: string; tokenVersion?: number; impersonatedBy?: string }) {
   const accessToken = jwt.sign(payload, getJwtSecret(), { expiresIn: '15m' });
-  const refreshToken = jwt.sign({ id: payload.id }, getRefreshSecret(), { expiresIn: '7d' });
+  const refreshToken = jwt.sign({ id: payload.id, tokenVersion: payload.tokenVersion ?? 0 }, getRefreshSecret(), { expiresIn: '7d' });
   return { accessToken, refreshToken };
 }
 
@@ -98,6 +104,7 @@ router.post('/login', async (req: Request, res: Response) => {
       role: user.role,
       email: user.email,
       name: user.name,
+      tokenVersion: user.tokenVersion || 0,
     });
 
     setAuthCookies(res, accessToken, refreshToken);
@@ -122,9 +129,9 @@ router.post('/refresh', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'No refresh token' });
     }
 
-    let payload: { id: string };
+    let payload: { id: string; tokenVersion?: number };
     try {
-      payload = jwt.verify(refreshToken, getRefreshSecret()) as { id: string };
+      payload = jwt.verify(refreshToken, getRefreshSecret()) as { id: string; tokenVersion?: number };
     } catch {
       clearAuthCookies(res);
       return res.status(401).json({ error: 'Refresh token expired' });
@@ -136,11 +143,19 @@ router.post('/refresh', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'User not found' });
     }
 
+    // Validate tokenVersion — reject if password was changed after token was issued
+    const currentVersion = user.tokenVersion || 0;
+    if (payload.tokenVersion !== undefined && payload.tokenVersion !== currentVersion) {
+      clearAuthCookies(res);
+      return res.status(401).json({ error: 'Token invalidated by password change' });
+    }
+
     const { accessToken, refreshToken: newRefresh } = issueTokenPair({
       id: user._id.toString(),
       role: user.role,
       email: user.email,
       name: user.name,
+      tokenVersion: currentVersion,
     });
 
     setAuthCookies(res, accessToken, newRefresh);
@@ -154,7 +169,8 @@ router.post('/refresh', async (req: Request, res: Response) => {
 // ─── GET /api/auth/me ────────────────────────────────────────────────────────
 router.get('/me', auth, async (req: AuthRequest, res: Response) => {
   try {
-    const user = await User.findById(req.user!.id);
+    // Explicit projection to avoid leaking sensitive fields even if toJSON hook changes
+    const user = await User.findById(req.user!.id).select('-password -resetTokenHash -resetTokenExpiry -__v');
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(user.toJSON());
   } catch (err) {
@@ -194,15 +210,33 @@ router.post('/impersonate', auth, async (req: AuthRequest, res: Response) => {
     // restore the session without forcing re-login.
     setAdminBackupCookie(res, req.user.id, req.user.email);
 
-    const { accessToken, refreshToken } = issueTokenPair({
-      id: target._id.toString(),
-      role: target.role,
-      email: target.email,
-      name: target.name,
-      impersonatedBy: req.user.email,
-    });
+    // Issue ONLY an access token for impersonation — no refresh token.
+    // This limits impersonation sessions to the access token lifetime (15 min)
+    // and prevents persistent impersonation via refresh.
+    const accessToken = jwt.sign(
+      {
+        id: target._id.toString(),
+        role: target.role,
+        email: target.email,
+        name: target.name,
+        impersonatedBy: req.user.email,
+      },
+      getJwtSecret(),
+      { expiresIn: '15m' },
+    );
 
-    setAuthCookies(res, accessToken, refreshToken);
+    // Set only the access cookie, clear any existing refresh cookie
+    const secure = IS_PROD;
+    const sameSite = IS_PROD ? ('strict' as const) : ('lax' as const);
+    res.cookie('insurelead_access', accessToken, {
+      httpOnly: true,
+      secure,
+      sameSite,
+      maxAge: 15 * 60 * 1000,
+      path: '/',
+    });
+    res.clearCookie('insurelead_refresh', { path: '/api/auth/refresh' });
+
     res.json({ user: target.toJSON(), impersonatedBy: req.user.email });
   } catch (err) {
     console.error('Impersonate error:', err);
@@ -220,7 +254,7 @@ router.post('/exit-impersonation', async (req: Request, res: Response) => {
 
     let payload: { adminId: string; adminEmail: string };
     try {
-      payload = jwt.verify(backupToken, getJwtSecret() + BACKUP_SECRET_SUFFIX) as {
+      payload = jwt.verify(backupToken, getAdminBackupSecret()) as {
         adminId: string;
         adminEmail: string;
       };
@@ -240,6 +274,7 @@ router.post('/exit-impersonation', async (req: Request, res: Response) => {
       role: admin.role,
       email: admin.email,
       name: admin.name,
+      tokenVersion: admin.tokenVersion || 0,
     });
 
     setAuthCookies(res, accessToken, refreshToken);

@@ -204,6 +204,28 @@ const LeadSchema = new Schema<ILead>(
   { timestamps: true }
 );
 
+// ── Indexes tailored to query patterns ──
+LeadSchema.index({ assignedAgent: 1, status: 1 });
+LeadSchema.index({ lastActivity: -1 });
+LeadSchema.index({ status: 1 });
+LeadSchema.index({ closedBy: 1, status: 1 });
+LeadSchema.index({ addedBy: 1 });
+LeadSchema.index({ nextFollowUp: 1 });
+// Text index for search queries
+LeadSchema.index({ name: 'text', email: 'text', companyName: 'text' });
+
+// ── Cap unbounded embedded arrays to prevent 16MB document overflow ──
+const MAX_ACTIVITIES = 100;
+const MAX_STAGE_HISTORY = 50;
+LeadSchema.pre('save', function () {
+  if (this.activities && this.activities.length > MAX_ACTIVITIES) {
+    this.activities = this.activities.slice(-MAX_ACTIVITIES) as any;
+  }
+  if (this.stageHistory && this.stageHistory.length > MAX_STAGE_HISTORY) {
+    this.stageHistory = this.stageHistory.slice(-MAX_STAGE_HISTORY) as any;
+  }
+});
+
 LeadSchema.set('toJSON', {
   transform: (_doc, ret: any) => {
     ret.id = ret._id.toString();
