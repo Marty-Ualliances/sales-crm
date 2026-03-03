@@ -272,7 +272,7 @@ export default function LeadDetailPage() {
           const parsed = JSON.parse(storedUser);
           currentUserName = parsed.name || 'Current User';
         }
-      } catch (e) { }
+      } catch { /* ignore parse error */ }
 
       const newActivity = {
         type: 'note',
