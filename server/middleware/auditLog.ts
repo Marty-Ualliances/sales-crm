@@ -24,7 +24,7 @@ export const auditLogMiddleware = async (req: Request, res: Response, next: Next
     const baseEntity = pathParts[pathParts.length - 1] || pathParts[pathParts.length - 2];
 
     let entityType = entityModelMap[baseEntity] || 'Unknown';
-    let entityId = req.params.id || req.params.leadId || req.body.id || req.body.leadId;
+    let entityId = req.params.id || req.params.leadId || req.body?.id || req.body?.leadId;
 
     // Track the original send method to capture the new value (the response body)
     // Limit capture to 64KB to prevent memory bloat from large responses
