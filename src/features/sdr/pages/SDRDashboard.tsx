@@ -86,15 +86,11 @@ export default function SDRDashboard() {
 
   return (
     <div className="space-y-6">
-      {/* Welcome banner */}
+      {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-slide-up">
-        <div className="relative rounded-2xl flex-1 overflow-hidden bg-gradient-to-r from-[hsl(var(--sidebar-background))] to-[hsl(210,50%,25%)] p-6 sm:p-8 text-white">
-          <div className="absolute top-0 right-0 w-64 h-64 bg-blue-500/10 rounded-full -translate-y-1/2 translate-x-1/3" />
-          <div className="absolute bottom-0 left-1/3 w-32 h-32 bg-white/5 rounded-full translate-y-1/2" />
-          <div className="relative">
-            <h1 className="text-2xl sm:text-3xl font-bold tracking-tight">Welcome back, {user?.name?.split(' ')[0] || 'Agent'}! 🚀</h1>
-            <p className="text-white/70 mt-1.5 text-sm sm:text-base">Here's your personal performance overview</p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold text-foreground">My Dashboard</h1>
+          <p className="text-sm text-muted-foreground mt-1">Your personal performance overview</p>
         </div>
         <DateFilter value={dateRange} onChange={setDateRange} />
       </div>
@@ -116,10 +112,10 @@ export default function SDRDashboard() {
         <div className="animate-slide-up stagger-5">
           <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Closed Won').length} icon={Target} onClick={() => setIsActiveAccountsModalOpen(true)} />
         </div>
-      </div>
+      </div >
 
       {/* Personal stats */}
-      <div className="rounded-xl border border-border bg-card p-5 shadow-card animate-slide-in-right glow-card">
+      < div className="rounded-xl border border-border bg-card p-5 shadow-card animate-slide-in-right glow-card" >
         <h2 className="text-lg font-semibold text-foreground mb-4">My Performance</h2>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-4 auto-rows-fr">
           <div className="text-center p-4 rounded-lg bg-secondary/50 hover:bg-secondary transition-all duration-300 hover:scale-105 cursor-default flex flex-col items-center justify-center">
@@ -148,11 +144,11 @@ export default function SDRDashboard() {
             <p className="text-xs text-muted-foreground">Closed Won</p>
           </div>
         </div>
-      </div>
+      </div >
 
 
       {/* Cadence Tasks */}
-      <div className="rounded-xl border border-border bg-card p-5 shadow-card animate-slide-up">
+      < div className="rounded-xl border border-border bg-card p-5 shadow-card animate-slide-up" >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-foreground">Cadence Actions Required</h2>
           <span className="text-xs font-medium px-2 py-1 rounded-full bg-primary/10 text-primary">
@@ -208,10 +204,10 @@ export default function SDRDashboard() {
             </div>
           )}
         </div>
-      </div>
+      </div >
 
       {/* Today's Tasks (Manual Follow-ups) */}
-      <div className="rounded-xl border border-border bg-card p-5 shadow-card">
+      < div className="rounded-xl border border-border bg-card p-5 shadow-card" >
         <h2 className="text-lg font-semibold text-foreground mb-4">Today's Tasks</h2>
         <div className="space-y-3">
           {leads
@@ -246,22 +242,22 @@ export default function SDRDashboard() {
             <p className="text-sm text-muted-foreground text-center py-4">No pending follow-ups. Great job!</p>
           )}
         </div>
-      </div>
+      </div >
 
       {/* My Leads Table */}
-      <div>
+      < div >
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-lg font-semibold text-foreground">My Leads</h2>
           <span className="text-sm text-muted-foreground">{leads.length} leads</span>
         </div>
         <LeadTable leads={leads} />
-      </div>
+      </div >
 
       <ActiveAccountsListModal
         isOpen={isActiveAccountsModalOpen}
         onClose={() => setIsActiveAccountsModalOpen(false)}
         leads={filteredLeads}
       />
-    </div>
+    </div >
   );
 }

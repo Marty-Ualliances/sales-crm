@@ -14,6 +14,7 @@ import { MeetingBookedModal, MeetingBookedData } from '@/features/meetings/compo
 import { MeetingCompletedModal } from '@/features/meetings/components/MeetingCompletedModal';
 import { EmployeeForm } from '@/features/leads/components/EmployeeForm';
 import { ActiveAccountModal, ActiveAccountData } from '@/features/leads/components/ActiveAccountModal';
+import { ContactPickerModal } from '@/components/common/ContactPickerModal';
 
 /** Strips non-digit chars (keeps leading +) for tel: URI */
 function toTelUri(phone: string): string {
@@ -73,6 +74,7 @@ export default function LeadDetailPage() {
   const [showEmployeeForm, setShowEmployeeForm] = useState(false);
   const [editingEmployeeIdx, setEditingEmployeeIdx] = useState<number | undefined>(undefined);
   const [isEditingLeadInfo, setIsEditingLeadInfo] = useState(false);
+  const [showContactPicker, setShowContactPicker] = useState(false);
   const [leadInfoForm, setLeadInfoForm] = useState({
     name: '',
     title: '',
@@ -490,8 +492,8 @@ export default function LeadDetailPage() {
             </div>
           </div>
           <div className="flex gap-2 ml-12 sm:ml-0">
-            {lead.phone && (
-              <Button size="sm" onClick={() => handleCall(lead.phone)}>
+            {(lead.phone || lead.companyPhone || (lead.employees?.length ?? 0) > 0) && (
+              <Button size="sm" onClick={() => setShowContactPicker(true)}>
                 <PhoneCall className="h-4 w-4 mr-1" />
                 Call Now
               </Button>
@@ -997,6 +999,12 @@ export default function LeadDetailPage() {
         onOpenChange={setShowActiveAccountModal}
         leadName={lead.name}
         onSubmit={onActiveAccount}
+      />
+      <ContactPickerModal
+        lead={lead}
+        open={showContactPicker}
+        onClose={() => setShowContactPicker(false)}
+        onCall={(phone) => handleCall(phone)}
       />
     </>
   );

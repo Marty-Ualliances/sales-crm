@@ -1,5 +1,7 @@
 'use client';
 
+import { useState } from 'react';
+
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Phone, Edit, CheckCircle, ChevronDown } from 'lucide-react';
@@ -10,6 +12,7 @@ import { useCompleteFollowUp, useCreateCall } from '@/hooks/useApi';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { toast } from 'sonner';
 import { getPriorityBadgeClass, getStageBadgeClass } from '@/features/leads/constants/pipeline';
+import { ContactPickerModal } from '@/components/common/ContactPickerModal';
 
 function toTelUri(phone: string): string {
   return `tel:${phone.replace(/[^+\d]/g, '')}`;
@@ -22,7 +25,7 @@ const formatCompanySize = (count?: number | null) => {
   return count.toLocaleString();
 };
 
-export default function LeadTable({ leads, compact = false }: { leads: Lead[]; compact?: boolean }) {
+export default function LeadTable({ leads, compact = false, startIndex = 0 }: { leads: Lead[]; compact?: boolean; startIndex?: number }) {
   const today = new Date().toISOString().split('T')[0];
   const router = useRouter();
   const pathname = usePathname() ?? '';
@@ -31,6 +34,7 @@ export default function LeadTable({ leads, compact = false }: { leads: Lead[]; c
   const completeFollowUp = useCompleteFollowUp();
   const createCall = useCreateCall();
   const { user } = useAuth();
+  const [contactPickerLead, setContactPickerLead] = useState<Lead | null>(null);
 
   const handleLogCall = async (lead: Lead, note: string) => {
     try {
@@ -92,7 +96,7 @@ export default function LeadTable({ leads, compact = false }: { leads: Lead[]; c
                   key={lead.id}
                   className={`border-b border-border/40 transition-all duration-200 hover:bg-primary/[0.03] ${isOverdue ? 'bg-destructive/5' : index % 2 === 1 ? 'bg-secondary/20' : ''}`}
                 >
-                  <td className="text-center px-3 py-3 text-muted-foreground text-xs font-medium">{index + 1}</td>
+                  <td className="text-center px-3 py-3 text-muted-foreground text-xs font-medium">{startIndex + index + 1}</td>
 
                   <td className="px-4 py-3">
                     <Link href={`${basePath}/leads/${lead.id}`} className="font-medium text-foreground hover:text-primary transition-colors">
@@ -141,11 +145,15 @@ export default function LeadTable({ leads, compact = false }: { leads: Lead[]; c
                       <div className="flex items-center justify-end gap-1">
                         {lead.phone && (
                           <div className="flex items-center">
-                            <a href={toTelUri(lead.phone)} title="Call Now">
-                              <Button variant="ghost" size="icon" className="h-8 w-8 text-primary hover:bg-primary/10 rounded-r-none">
-                                <Phone className="h-3.5 w-3.5" />
-                              </Button>
-                            </a>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 text-primary hover:bg-primary/10 rounded-r-none"
+                              title="Call Now"
+                              onClick={() => setContactPickerLead(lead)}
+                            >
+                              <Phone className="h-3.5 w-3.5" />
+                            </Button>
                             <DropdownMenu>
                               <DropdownMenuTrigger asChild>
                                 <Button variant="ghost" size="icon" className="h-8 w-5 text-primary hover:bg-primary/10 rounded-l-none border-l border-primary/20" title="Quick Log Call">
@@ -191,6 +199,17 @@ export default function LeadTable({ leads, compact = false }: { leads: Lead[]; c
           </tbody>
         </table>
       </div>
+
+      {contactPickerLead && (
+        <ContactPickerModal
+          lead={contactPickerLead}
+          open={!!contactPickerLead}
+          onClose={() => setContactPickerLead(null)}
+          onCall={(phone) => {
+            handleLogCall(contactPickerLead, `Called ${phone}`);
+          }}
+        />
+      )}
     </div>
   );
 }

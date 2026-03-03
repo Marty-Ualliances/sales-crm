@@ -11,6 +11,8 @@ import { LeadStatus } from '@/features/leads/types/leads';
 import { useToast } from '@/hooks/use-toast';
 import { STAGE_KEYS, PRIORITY_KEYS, getStageBadgeClass } from '@/features/leads/constants/pipeline';
 
+const PAGE_SIZE = 25;
+
 interface EditForm {
   name: string;
   email: string;
@@ -33,6 +35,7 @@ export default function LeadGenLeadsPage() {
   const { toast } = useToast();
 
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
   const [userFilter, setUserFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState<'A' | 'B' | 'C' | 'all'>('all');
@@ -58,18 +61,28 @@ export default function LeadGenLeadsPage() {
 
   const sdrs = useMemo(() => agents.filter((a: any) => a.role === 'sdr'), [agents]);
 
-  const filtered = useMemo(() => leads.filter((l: any) => {
-    const q = search.toLowerCase();
-    const matchSearch = !search ||
-      l.name?.toLowerCase().includes(q) ||
-      l.email?.toLowerCase().includes(q) ||
-      l.companyName?.toLowerCase().includes(q) ||
-      (l.phone || '').includes(search);
-    const matchStatus = statusFilter === 'all' || l.status === statusFilter;
-    const matchUser = userFilter === 'all' || l.assignedAgent === userFilter || l.addedBy === userFilter;
-    const matchPriority = priorityFilter === 'all' || l.priority === priorityFilter;
-    return matchSearch && matchStatus && matchUser && matchPriority;
-  }), [leads, search, statusFilter, userFilter, priorityFilter]);
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, userFilter, priorityFilter]);
+
+  const filtered = useMemo(() => {
+    return leads.filter((l: any) => {
+      const q = search.toLowerCase();
+      const matchSearch = !search ||
+        l.name?.toLowerCase().includes(q) ||
+        l.email?.toLowerCase().includes(q) ||
+        l.companyName?.toLowerCase().includes(q) ||
+        (l.phone || '').includes(search);
+      const matchStatus = statusFilter === 'all' || l.status === statusFilter;
+      const matchUser = userFilter === 'all' || l.assignedAgent === userFilter || l.addedBy === userFilter;
+      const matchPriority = priorityFilter === 'all' || l.priority === priorityFilter;
+      return matchSearch && matchStatus && matchUser && matchPriority;
+    });
+  }, [leads, search, statusFilter, userFilter, priorityFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const activeFilterCount = (statusFilter !== 'all' ? 1 : 0) + (priorityFilter !== 'all' ? 1 : 0) + (userFilter !== 'all' ? 1 : 0);
 
@@ -383,7 +396,7 @@ export default function LeadGenLeadsPage() {
                   </td>
                 </tr>
               ) : (
-                filtered.map((lead: any) => (
+                paginated.map((lead: any) => (
                   <tr
                     key={lead.id}
                     className={`border-b border-border/50 hover:bg-muted/30 transition-colors ${selectedIds.has(lead.id) ? 'bg-primary/5' : ''}`}
@@ -446,8 +459,23 @@ export default function LeadGenLeadsPage() {
             </tbody>
           </table>
         </div>
-        <div className="px-4 py-2 border-t border-border bg-muted/20 text-xs text-muted-foreground">
-          Showing {filtered.length} of {leads.length} leads
+        <div className="px-4 py-3 border-t border-border bg-muted/20 flex flex-col sm:flex-row items-center justify-between gap-3">
+          <p className="text-xs text-muted-foreground">
+            Showing {filtered.length === 0 ? 0 : (safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length} leads
+          </p>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled={safePage <= 1} onClick={() => setPage(p => p - 1)}>
+                Previous
+              </Button>
+              <span className="text-sm font-medium text-foreground px-2">
+                {safePage} / {totalPages}
+              </span>
+              <Button variant="outline" size="sm" disabled={safePage >= totalPages} onClick={() => setPage(p => p + 1)}>
+                Next
+              </Button>
+            </div>
+          )}
         </div>
       </div>
 

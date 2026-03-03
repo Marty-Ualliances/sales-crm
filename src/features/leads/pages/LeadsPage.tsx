@@ -341,7 +341,7 @@ export default function LeadsPage() {
         </div>
       </div>
 
-      <LeadTable leads={paginated} />
+      <LeadTable leads={paginated} startIndex={(safePage - 1) * PAGE_SIZE} />
 
       {totalPages > 1 && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border pt-4">

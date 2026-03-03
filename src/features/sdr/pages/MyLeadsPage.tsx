@@ -2,11 +2,13 @@
 import { useLeads } from '@/hooks/useApi';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import LeadTable from '@/components/common/LeadTable';
-import { useState, useRef, useEffect } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import { Search, Loader2, SlidersHorizontal, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { LeadStatus } from '@/features/leads/types/leads';
 import { STAGE_KEYS, PRIORITY_KEYS } from '@/features/leads/constants/pipeline';
+
+const PAGE_SIZE = 25;
 
 
 export default function MyLeadsPage() {
@@ -14,6 +16,7 @@ export default function MyLeadsPage() {
   const { data: allLeads = [], isLoading } = useLeads();
   const leads = allLeads.filter((l: any) => !l.assignedAgent || l.assignedAgent === user?.name);
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
   const [statusFilter, setStatusFilter] = useState<LeadStatus | 'all'>('all');
   const [priorityFilter, setPriorityFilter] = useState<'A' | 'B' | 'C' | 'all'>('all');
   const [filterOpen, setFilterOpen] = useState(false);
@@ -27,12 +30,22 @@ export default function MyLeadsPage() {
     return () => document.removeEventListener('mousedown', handler);
   }, []);
 
-  const filtered = leads.filter((l: any) => {
-    const matchSearch = !search || l.name.toLowerCase().includes(search.toLowerCase()) || l.phone.includes(search) || l.email.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === 'all' || l.status === statusFilter;
-    const matchPriority = priorityFilter === 'all' || l.priority === priorityFilter;
-    return matchSearch && matchStatus && matchPriority;
-  });
+  useEffect(() => {
+    setPage(1);
+  }, [search, statusFilter, priorityFilter]);
+
+  const filtered = useMemo(() => {
+    return leads.filter((l: any) => {
+      const matchSearch = !search || l.name.toLowerCase().includes(search.toLowerCase()) || (l.phone || '').includes(search) || (l.email || '').toLowerCase().includes(search.toLowerCase());
+      const matchStatus = statusFilter === 'all' || l.status === statusFilter;
+      const matchPriority = priorityFilter === 'all' || l.priority === priorityFilter;
+      return matchSearch && matchStatus && matchPriority;
+    });
+  }, [leads, search, statusFilter, priorityFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage = Math.min(page, totalPages);
+  const paginated = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   const activeFilterCount = (statusFilter !== 'all' ? 1 : 0) + (priorityFilter !== 'all' ? 1 : 0);
 
@@ -162,7 +175,26 @@ export default function MyLeadsPage() {
         </div>
       )}
 
-      <LeadTable leads={filtered} />
+      <LeadTable leads={paginated} startIndex={(safePage - 1) * PAGE_SIZE} />
+
+      {totalPages > 1 && (
+        <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border pt-4">
+          <p className="text-sm text-muted-foreground">
+            Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}
+          </p>
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" disabled={safePage <= 1} onClick={() => setPage(p => p - 1)}>
+              Previous
+            </Button>
+            <span className="text-sm font-medium text-foreground px-2">
+              {safePage} / {totalPages}
+            </span>
+            <Button variant="outline" size="sm" disabled={safePage >= totalPages} onClick={() => setPage(p => p + 1)}>
+              Next
+            </Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
