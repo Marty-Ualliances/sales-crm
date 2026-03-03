@@ -18,8 +18,12 @@ export const leadsApi = {
         if (params?.search) q.set('search', params.search);
         if (params?.agent) q.set('agent', params.agent);
         const qs = q.toString();
-        const raw = await request<unknown[]>(`/leads${qs ? `?${qs}` : ''}`);
-        return validated(LeadsListSchema, raw);
+        const raw = await request<unknown>(`/leads${qs ? `?${qs}` : ''}`);
+        // Server returns { leads, total, page, limit } — unwrap the array
+        const list = raw && typeof raw === 'object' && !Array.isArray(raw) && 'leads' in raw
+            ? (raw as any).leads
+            : raw;
+        return validated(LeadsListSchema, Array.isArray(list) ? list : []);
     },
     kpis: async (): Promise<KPIs> => {
         const raw = await request<unknown>('/leads/kpis');
