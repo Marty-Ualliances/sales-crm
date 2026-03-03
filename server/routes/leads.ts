@@ -375,6 +375,52 @@ router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res
           }
         }
 
+        // ── AUTO-CORRECT name / title / companyName rotation ──
+        // Some CSV exports have the first 3 columns shifted:
+        //   Column "Company Name" → actually a person name
+        //   Column "Name"         → actually a job title
+        //   Column "Title"        → actually a company name
+        // Detect this per-row using content heuristics and swap back.
+        {
+          const n = (doc.name || '').trim();
+          const t = (doc.title || '').trim();
+          const c = (doc.companyName || '').trim();
+
+          if (n && t && c) {
+            const COMPANY_RE = /\b(inc|llc|ltd|corp|co\b|company|companies|group|services|solutions|agency|agencies|insurance|financial|bank|international|industries|associates|partners|consulting|advisors|enterprises|limited|holdings|capital|mutual|national|underwriters|global|systems|technologies|networks)\b/i;
+            const TITLE_RE = /\b(president|ceo|cfo|coo|cto|cio|vp|vice\s+president|director|manager|officer|partner|founder|owner|principal|chief|head\s+of|evp|svp|avp|sr\b|senior|associate|analyst|coordinator|administrator|executive|chairman|chairwoman|chairperson|secretary|treasurer|counsel|controller|actuary|underwriter|broker|agent|advisor|consultant|specialist|supervisor|superintendent|lead\b)\b/i;
+
+            const nameIsTitle = TITLE_RE.test(n);
+            const nameIsCompany = COMPANY_RE.test(n);
+            const titleIsCompany = COMPANY_RE.test(t);
+            const titleIsName = !TITLE_RE.test(t) && !COMPANY_RE.test(t) && t.split(/\s+/).length <= 4;
+            const compIsTitle = TITLE_RE.test(c);
+            const compIsName = !COMPANY_RE.test(c) && !TITLE_RE.test(c) && c.split(/\s+/).length <= 4;
+
+            // Pattern 1: Rotation — name has title, title has company, company has name
+            if (nameIsTitle && titleIsCompany && compIsName) {
+              doc.name = c;
+              doc.title = n;
+              doc.companyName = t;
+            }
+            // Pattern 2: name has company, company has name (two-way swap)
+            else if (nameIsCompany && compIsName && !nameIsTitle) {
+              doc.name = c;
+              doc.companyName = n;
+            }
+            // Pattern 3: name has title, title has name (two-way swap)
+            else if (nameIsTitle && titleIsName) {
+              doc.name = t;
+              doc.title = n;
+            }
+            // Pattern 4: title has company, company has title
+            else if (titleIsCompany && compIsTitle) {
+              doc.title = c;
+              doc.companyName = t;
+            }
+          }
+        }
+
         // Collect data from unknown columns → notes
         const extraFields: string[] = [];
         for (const header of unmapped) {
