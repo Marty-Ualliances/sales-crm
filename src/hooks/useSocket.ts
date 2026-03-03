@@ -15,8 +15,20 @@ function getSocket(): Socket {
       reconnectionDelay: 2000,
       withCredentials: true, // send httpOnly cookies with socket handshake
     });
+
+    socketInstance.on('connect_error', (err) => {
+      console.warn('[Socket] Connection error:', err.message);
+    });
   }
   return socketInstance;
+}
+
+/** Disconnect and destroy the shared socket (call on logout) */
+export function disconnectSocket() {
+  if (socketInstance) {
+    socketInstance.disconnect();
+    socketInstance = null;
+  }
 }
 
 /**
@@ -38,6 +50,9 @@ export function useSocket() {
       qc.invalidateQueries({ queryKey: ['hr-closed-leads'] });
       qc.invalidateQueries({ queryKey: ['notifications'] });
       qc.invalidateQueries({ queryKey: ['meetings'] });
+      qc.invalidateQueries({ queryKey: ['pipeline-board'] });
+      qc.invalidateQueries({ queryKey: ['my-tasks'] });
+      qc.invalidateQueries({ queryKey: ['lead-activities'] });
     };
 
     socket.on('lead:changed', handlerRef.current);

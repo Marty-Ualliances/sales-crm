@@ -30,13 +30,15 @@ export const leadsApi = {
         return validated(KPIsSchema, raw);
     },
     get: async (id: string): Promise<Lead> => {
-        const raw = await request<unknown>(`/leads/${id}`);
-        return validated(LeadSchema, raw);
+        const raw = await request<any>(`/leads/${id}`);
+        // Response is { lead, activities } — extract lead
+        const leadData = raw && typeof raw === 'object' && 'lead' in raw ? raw.lead : raw;
+        return validated(LeadSchema, leadData);
     },
     create: (data: any) =>
         request<any>('/leads', { method: 'POST', body: JSON.stringify(data) }),
     update: (id: string, data: any) =>
-        request<any>(`/leads/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+        request<any>(`/leads/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
     delete: (id: string) =>
         request<any>(`/leads/${id}`, { method: 'DELETE' }),
     importPreview: async (file: File) => {

@@ -20,8 +20,8 @@ router.get('/', auth, async (req: AuthRequest, res: Response) => {
     if (role === 'sdr') {
       filter.createdBy = req.user!.id;
     }
-    // Admin and leadgen see all meetings
-    const meetings = await Meeting.find(filter).sort({ date: -1, time: -1 }).lean();
+    // Admin and leadgen see all meetings (capped at 500)
+    const meetings = await Meeting.find(filter).sort({ date: -1, time: -1 }).limit(500).lean();
     res.json(meetings.map((m: any) => ({ ...m, id: m._id.toString() })));
   } catch (err) {
     console.error('List meetings error:', err);

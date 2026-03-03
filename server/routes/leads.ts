@@ -1,704 +1,1087 @@
 import { Router, Response } from 'express';
+import mongoose from 'mongoose';
 import multer from 'multer';
-import Lead from '../models/Lead';
-import { auth, adminOnly, leadgenOrAdmin, AuthRequest } from '../middleware/auth';
-import { notifyLeadStatusChange, notifyNewLead, notifyFollowUpDue, notifyLeadImported } from '../utils/notificationHelper';
-import { emitLeadChangedToRoles } from '../socket';
+import Lead from '../models/Lead.js';
+import Activity from '../models/Activity.js';
+import PipelineStage from '../models/PipelineStage.js';
+import User from '../models/User.js';
+import Team from '../models/Team.js';
+import { authenticateToken, checkPermission, AuthRequest } from '../middleware/auth.js';
+import { emitLeadChangedToRoles } from '../socket.js';
+import { validate } from '../middleware/validate.js';
+import { createLeadSchema, updateLeadSchema } from '../validators/lead.js';
 
-import * as XLSX from 'xlsx';
-import { mapColumns, applyMergeRules, normalizeHeader, type MappingResult, type ColumnMapping, type MergeRule } from '../utils/csvColumnMapper';
+const router = Router();
 
-function emitLeadChange(action: string, data?: Record<string, unknown>) {
-  try { emitLeadChangedToRoles(action, data); } catch (_) { }
-}
-
-/** Escape special regex characters in a user-supplied string to prevent ReDoS */
+/** Escape special regex characters to prevent ReDoS */
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
-/** Allowed fields for lead creation/update to prevent mass assignment */
-const LEAD_WRITABLE_FIELDS = [
-  'name', 'title', 'companyName', 'email', 'workDirectPhone', 'homePhone',
-  'mobilePhone', 'corporatePhone', 'otherPhone', 'companyPhone', 'employeeCount',
-  'employees', 'personLinkedinUrl', 'website', 'companyLinkedinUrl', 'address',
-  'city', 'state', 'status', 'assignedAgent', 'assignedVA', 'notes',
-  'nextFollowUp', 'source', 'priority', 'segment', 'sourceChannel', 'date',
-  'activeServiceDate', 'contractSignDate', 'qualification', 'cadence',
-];
-
-function pickAllowedFields(body: Record<string, any>, allowed: string[]): Record<string, any> {
-  const clean: Record<string, any> = {};
-  for (const key of allowed) {
-    if (body[key] !== undefined) clean[key] = body[key];
-  }
-  return clean;
-}
-
-const router = Router();
+// ── Multer for CSV upload (5MB limit) ──
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10 MB
+  limits: { fileSize: 5 * 1024 * 1024 },
   fileFilter: (_req, file, cb) => {
-    const allowed = ['.csv', '.tsv', '.txt', '.xlsx', '.xls'];
-    const ext = file.originalname.toLowerCase().substring(file.originalname.lastIndexOf('.'));
-    if (!allowed.includes(ext)) {
-      return cb(new Error('Supported formats: .csv, .tsv, .xlsx, .xls'));
+    if (file.mimetype === 'text/csv' && file.originalname.toLowerCase().endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV files are allowed'));
     }
-    cb(null, true);
   },
 });
 
-// Valid enum values
-const VALID_SOURCES = ['CSV Import', 'Manual', 'Website', 'Referral', 'LinkedIn', 'Cold – High Fit', 'Warm – Engaged', 'Cold – Quick Sourced', 'Cold – Bulk Data', 'Other'];
-const VALID_STATUSES = ['New Lead', 'Working', 'Connected', 'Qualified', 'Meeting Booked', 'Meeting Completed', 'Proposal Sent', 'Negotiation', 'Closed Won', 'Closed Lost', 'Nurture'];
-
-/** Parse any uploaded file (xlsx, xls, csv, tsv) into an array of row objects */
-function parseSpreadsheet(buffer: Buffer, filename: string): { headers: string[]; rows: Record<string, string>[] } {
-  const workbook = XLSX.read(buffer, { type: 'buffer', cellDates: true, dateNF: 'yyyy-mm-dd' });
-  const sheetName = workbook.SheetNames[0];
-  const sheet = workbook.Sheets[sheetName];
-  const jsonData: any[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
-
-  if (jsonData.length < 2) return { headers: [], rows: [] };
-
-  const headers = jsonData[0].map((h: any) => String(h || '').trim());
-  const rows = jsonData.slice(1)
-    .filter(row => row.some((cell: any) => String(cell || '').trim() !== ''))
-    .map(row => {
-      const obj: Record<string, string> = {};
-      headers.forEach((h, i) => {
-        obj[h] = String(row[i] || '').trim();
-      });
-      return obj;
-    });
-
-  return { headers, rows };
+// ── Helper: get default pipeline stage (order 1) ──
+async function getDefaultStage() {
+  return PipelineStage.findOne({ isDefault: true, isActive: true }).sort({ order: 1 });
 }
 
-// GET /api/leads — get all leads (admin) or agent's leads (sdr)
-router.get('/', auth, async (req: AuthRequest, res: Response) => {
+// ── Helper: build date-range filter ──
+function buildDateFilter(dateFrom?: string, dateTo?: string): Record<string, any> {
+  if (!dateFrom && !dateTo) return {};
+  const f: Record<string, any> = {};
+  if (dateFrom) f.$gte = new Date(dateFrom);
+  if (dateTo) f.$lte = new Date(dateTo);
+  return { createdAt: f };
+}
+
+// ── Helper: populate lead refs ──
+const LEAD_POPULATE = [
+  { path: 'assignedTo', select: 'name email avatar role' },
+  { path: 'uploadedBy', select: 'name email' },
+  { path: 'pipelineStage', select: 'name color order probability' },
+];
+
+function sanitizeCsvValue(val: string): string {
+  const trimmed = val.trim();
+  if (/^[=+\-@|\t\r]/.test(trimmed)) {
+    return "'" + trimmed;
+  }
+  return trimmed;
+}
+
+// ════════════════════════════════════════════════════════════════════════════════
+// GET /api/leads — paginated, filtered, role-based
+// ════════════════════════════════════════════════════════════════════════════════
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const { status, search, agent } = req.query;
+    const {
+      status, assignedTo, pipelineStage, source, search,
+      page = '1', limit = '25', sortBy = 'createdAt', sortOrder = 'desc',
+      dateFrom, dateTo,
+    } = req.query as Record<string, string>;
+
     const filter: Record<string, any> = {};
 
-    if (req.user?.role === 'sdr') {
-      const User = (await import('../models/User')).default;
-      const user = await User.findById(req.user.id);
-      if (user) filter.assignedAgent = user.name;
-    } else if (agent) {
-      filter.assignedAgent = agent;
-    }
-    // admin, leadgen, hr see all leads (no extra filter)
-
-    if (status && status !== 'all') filter.status = status;
-    if (search) {
-      const s = escapeRegex(String(search));
+    // Role-based visibility: SDRs/closers only see their own leads or unassigned leads
+    const role = req.user!.role;
+    if (role === 'sdr' || role === 'closer') {
       filter.$or = [
-        { name: { $regex: s, $options: 'i' } },
+        { assignedTo: new mongoose.Types.ObjectId(req.user!.id) },
+        { assignedTo: { $exists: false } },
+        { assignedTo: null }
+      ];
+    } else if (assignedTo) {
+      filter.assignedTo = new mongoose.Types.ObjectId(assignedTo as string);
+    }
+
+    if (status) filter.status = status;
+    if (pipelineStage) filter.pipelineStage = new mongoose.Types.ObjectId(pipelineStage as string);
+    if (source) filter.source = source;
+    if (dateFrom || dateTo) {
+      filter.createdAt = {};
+      if (dateFrom) filter.createdAt.$gte = new Date(dateFrom as string);
+      if (dateTo) filter.createdAt.$lte = new Date(dateTo as string);
+    }
+    if (search) {
+      const s = escapeRegex(search as string);
+      const searchConditions = [
+        { firstName: { $regex: s, $options: 'i' } },
+        { lastName: { $regex: s, $options: 'i' } },
         { email: { $regex: s, $options: 'i' } },
-        { companyName: { $regex: s, $options: 'i' } },
-        { workDirectPhone: { $regex: s, $options: 'i' } },
-        { mobilePhone: { $regex: s, $options: 'i' } },
-        { city: { $regex: s, $options: 'i' } },
-        { state: { $regex: s, $options: 'i' } },
+        { company: { $regex: s, $options: 'i' } },
+        { phone: { $regex: s, $options: 'i' } },
+      ];
+      // Combine with existing role-based $or using $and to avoid clobber
+      if (filter.$or) {
+        const roleOr = filter.$or;
+        delete filter.$or;
+        filter.$and = [{ $or: roleOr }, { $or: searchConditions }];
+      } else {
+        filter.$or = searchConditions;
+      }
+    }
+
+    const pageNum = Math.max(1, parseInt(page as string, 10) || 1);
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit as string, 10) || 25));
+    const skip = (pageNum - 1) * limitNum;
+    const sort: Record<string, 1 | -1> = { [sortBy as string]: sortOrder === 'asc' ? 1 : -1 };
+
+    const [leads, total] = await Promise.all([
+      Lead.find(filter)
+        .populate(LEAD_POPULATE)
+        .sort(sort)
+        .skip(skip)
+        .limit(limitNum)
+        .lean(),
+      Lead.countDocuments(filter),
+    ]);
+
+    res.json({
+      leads,
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.ceil(total / limitNum),
+      },
+    });
+  } catch (err) {
+    console.error('GET /api/leads error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
+// GET /api/leads/unassigned — leads without assignedTo
+// ════════════════════════════════════════════════════════════════════════════════
+router.get('/unassigned', authenticateToken, checkPermission('leads', 'assign'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { page = '1', limit = '25', search } = req.query as Record<string, string>;
+    const pageNum = Math.max(1, parseInt(page, 10) || 1);
+    const limitNum = Math.min(100, parseInt(limit, 10) || 25);
+
+    const filter: Record<string, any> = { assignedTo: null };
+    if (search) {
+      const s = escapeRegex(search);
+      filter.$or = [
+        { firstName: { $regex: search, $options: 'i' } },
+        { lastName: { $regex: search, $options: 'i' } },
+        { email: { $regex: search, $options: 'i' } },
+        { company: { $regex: search, $options: 'i' } },
       ];
     }
 
-    // Paginate to prevent unbounded queries — default 200, max 500
-    const page = Math.max(1, parseInt(String(req.query.page || '1'), 10) || 1);
-    const limit = Math.min(500, Math.max(1, parseInt(String(req.query.limit || '200'), 10) || 200));
-    const skip = (page - 1) * limit;
-
     const [leads, total] = await Promise.all([
-      Lead.find(filter).sort({ lastActivity: -1 }).skip(skip).limit(limit),
+      Lead.find(filter)
+        .populate(LEAD_POPULATE)
+        .sort({ createdAt: -1 })
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
       Lead.countDocuments(filter),
     ]);
-    res.json({ leads, total, page, limit });
+
+    res.json({
+      leads,
+      pagination: { total, page: pageNum, limit: limitNum, pages: Math.ceil(total / limitNum) },
+    });
   } catch (err) {
-    console.error('Get leads error:', err);
+    console.error('GET /api/leads/unassigned error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// GET /api/leads/kpis
-router.get('/kpis', auth, async (req: AuthRequest, res: Response) => {
+// ════════════════════════════════════════════════════════════════════════════════
+// GET /api/leads/kpis — dashboard KPI summary
+// ════════════════════════════════════════════════════════════════════════════════
+router.get('/kpis', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const filter: Record<string, any> = {};
-    if (req.user?.role === 'sdr') {
-      const User = (await import('../models/User')).default;
-      const user = await User.findById(req.user.id);
-      if (user) filter.assignedAgent = user.name;
+    const role = req.user!.role;
+    const baseFilter: Record<string, any> = { isDeleted: { $ne: true } };
+
+    // SDRs/closers only see their own leads
+    if (role === 'sdr' || role === 'closer') {
+      baseFilter.assignedTo = new mongoose.Types.ObjectId(req.user!.id);
     }
 
-    const leads = await Lead.find(filter);
-    const today = new Date();
-    const totalLeads = leads.length;
-    const totalCalls = leads.reduce((sum, l) => sum + l.callCount, 0);
-    const sevenDaysAgo = new Date(today.getTime() - 7 * 86400000);
-    const recentActivity = leads.filter(l => l.lastActivity >= sevenDaysAgo).length;
-    const followUpsRemaining = leads.filter(l => l.nextFollowUp && l.status !== 'Active Account').length;
-    const overdueFollowUps = leads.filter(l => l.nextFollowUp && l.nextFollowUp < today && l.status !== 'Active Account').length;
-    const closedCount = leads.filter(l => l.status === 'Active Account').length;
-    const conversionRate = totalLeads > 0 ? Math.round((closedCount / totalLeads) * 100) : 0;
-    const totalRevenue = leads.reduce((sum, l) => sum + (l.revenue || 0), 0);
-    const appointmentsBooked = leads.filter(l => l.status === 'Appointment Set').length;
+    const [totalLeads, newLeads, closedWon, closedLost, followUpsDue] = await Promise.all([
+      Lead.countDocuments(baseFilter),
+      Lead.countDocuments({ ...baseFilter, status: 'new' }),
+      Lead.countDocuments({ ...baseFilter, status: 'won' }),
+      Lead.countDocuments({ ...baseFilter, status: 'lost' }),
+      Activity.countDocuments({
+        ...(role === 'sdr' || role === 'closer' ? { userId: req.user!.id } : {}),
+        type: 'follow_up',
+        isCompleted: false,
+        scheduledAt: { $lte: new Date() },
+      }),
+    ]);
+
+    const activeLeads = totalLeads - closedWon - closedLost;
+
+    res.json({ totalLeads, newLeads, activeLeads, closedWon, closedLost, followUpsDue });
+  } catch (err) {
+    console.error('GET /api/leads/kpis error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
+// GET /api/leads/funnel — pipeline funnel analytics
+// ════════════════════════════════════════════════════════════════════════════════
+router.get('/funnel', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const stages = await PipelineStage.find({ isActive: true }).sort({ order: 1 }).lean();
+
+    const baseFilter: Record<string, any> = { isDeleted: { $ne: true } };
+
+    // Stage counts via aggregation
+    const stageCounts = await Lead.aggregate([
+      { $match: baseFilter },
+      { $group: { _id: '$pipelineStage', count: { $sum: 1 } } },
+    ]);
+    const stageCountMap = new Map(stageCounts.map((s: any) => [s._id?.toString(), s.count]));
+
+    const totalLeads = stageCounts.reduce((acc: number, s: any) => acc + s.count, 0);
+    const closedWon = await Lead.countDocuments({ ...baseFilter, status: 'won' });
+    const totalRevenue = (await Lead.aggregate([
+      { $match: { ...baseFilter, status: 'won' } },
+      { $group: { _id: null, total: { $sum: '$dealValue' } } },
+    ]))[0]?.total || 0;
+
+    const conversionRate = totalLeads > 0 ? Math.round((closedWon / totalLeads) * 100) : 0;
+
+    // Average days in "new" status
+    const newLeads = await Lead.find({ ...baseFilter, status: 'new' }).select('createdAt').lean() as unknown as { createdAt: Date }[];
+    const now = Date.now();
+    const avgDaysNew = newLeads.length > 0
+      ? Math.round(newLeads.reduce((acc, l) => acc + (now - new Date(l.createdAt).getTime()) / (1000 * 60 * 60 * 24), 0) / newLeads.length)
+      : 0;
+
+    const stageData = stages.map((stage) => ({
+      stage: stage.name.toLowerCase().replace(/\s+/g, '_'),
+      label: stage.name,
+      count: stageCountMap.get(stage._id.toString()) || 0,
+      pct: totalLeads > 0 ? Math.round(((stageCountMap.get(stage._id.toString()) || 0) / totalLeads) * 100) : 0,
+    }));
+
+    // Per-agent breakdown
+    const agentStats = await Lead.aggregate([
+      { $match: { ...baseFilter, assignedTo: { $ne: null } } },
+      {
+        $group: {
+          _id: '$assignedTo',
+          total: { $sum: 1 },
+          closedWon: { $sum: { $cond: [{ $eq: ['$status', 'won'] }, 1, 0] } },
+        },
+      },
+      {
+        $lookup: {
+          from: 'users',
+          localField: '_id',
+          foreignField: '_id',
+          as: 'user',
+        },
+      },
+      { $unwind: '$user' },
+      { $project: { name: '$user.name', total: 1, closedWon: 1 } },
+      { $sort: { closedWon: -1 } },
+    ]);
+
+    // Get meeting counts per agent
+    const meetingCounts = await Activity.aggregate([
+      { $match: { type: 'meeting' } },
+      { $group: { _id: '$userId', meetings: { $sum: 1 } } },
+    ]);
+    const meetingsMap = new Map(meetingCounts.map((m: any) => [m._id.toString(), m.meetings]));
+
+    const byAgent = agentStats.map((a: any) => ({
+      name: a.name,
+      total: a.total,
+      closedWon: a.closedWon,
+      meetings: meetingsMap.get(a._id.toString()) || 0,
+    }));
 
     res.json({
       totalLeads,
-      totalCalls,
-      recentActivity,
-      followUpsRemaining,
-      overdueFollowUps,
-      appointmentsBooked,
+      closedWon,
       conversionRate,
       totalRevenue,
+      avgDaysNew,
+      stages: stageData,
+      byAgent,
     });
   } catch (err) {
+    console.error('GET /api/leads/funnel error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// GET /api/leads/funnel — admin funnel KPI metrics
-router.get('/funnel', auth, adminOnly, async (_req: AuthRequest, res: Response) => {
+// ════════════════════════════════════════════════════════════════════════════════
+// GET /api/leads/:id — single lead + last 10 activities
+// ════════════════════════════════════════════════════════════════════════════════
+router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
-    const leads = await Lead.find({}).lean();
-    const { PIPELINE_STAGES } = await import('../constants/pipeline');
+    const lead = await Lead.findById(req.params.id).populate(LEAD_POPULATE);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
 
-    const total = leads.length || 1; // avoid div/0
-    const stages = PIPELINE_STAGES.map(s => {
-      const count = leads.filter((l: any) => l.status === s).length;
-      return { stage: s, label: s, count, pct: Math.round((count / total) * 100) };
-    });
-
-    const closedWon = leads.filter((l: any) => l.status === 'Closed Won').length;
-    const conversionRate = Math.round((closedWon / total) * 100);
-    const totalRevenue = leads.reduce((sum: number, l: any) => sum + (l.revenue || 0), 0);
-
-    // Per-agent breakdown
-    const agentMap: Record<string, { total: number; closedWon: number; meetings: number }> = {};
-    for (const lead of leads as any[]) {
-      const a = lead.assignedAgent || 'Unassigned';
-      if (!agentMap[a]) agentMap[a] = { total: 0, closedWon: 0, meetings: 0 };
-      agentMap[a].total++;
-      if (lead.status === 'Closed Won') agentMap[a].closedWon++;
-      if (lead.status === 'Meeting Booked' || lead.status === 'Meeting Completed') agentMap[a].meetings++;
+    // SDRs/closers can only view their own leads or unassigned leads
+    const role = req.user!.role;
+    if ((role === 'sdr' || role === 'closer')) {
+      const isAssignedToMe = lead.assignedTo?.toString() === req.user!.id;
+      const isUnassigned = !lead.assignedTo;
+      if (!isAssignedToMe && !isUnassigned) {
+        return res.status(403).json({ error: 'Not authorized to view this lead' });
+      }
     }
-    const byAgent = Object.entries(agentMap)
-      .map(([name, stats]) => ({ name, ...stats }))
-      .sort((a, b) => b.total - a.total);
 
-    // Avg days in stage (for stuck leads)
-    const now = Date.now();
-    const avgDaysNew = (() => {
-      const newLeads = leads.filter((l: any) => l.status === 'New Lead') as any[];
-      if (!newLeads.length) return 0;
-      const sum = newLeads.reduce((s: number, l: any) => {
-        const created = l.createdAt ? new Date(l.createdAt).getTime() : now;
-        return s + (now - created) / 86400000;
-      }, 0);
-      return Math.round(sum / newLeads.length);
-    })();
+    const activities = await Activity.find({ leadId: lead._id })
+      .populate('userId', 'name avatar role')
+      .sort({ createdAt: -1 })
+      .limit(10)
+      .lean();
 
-    res.json({ stages, conversionRate, totalRevenue, closedWon, byAgent, avgDaysNew, totalLeads: leads.length });
+    res.json({ lead, activities });
   } catch (err) {
-    console.error('Funnel KPI error:', err);
+    console.error('GET /api/leads/:id error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// GET /api/leads/:id
-router.get('/:id', auth, async (req: AuthRequest, res: Response) => {
+// ════════════════════════════════════════════════════════════════════════════════
+// POST /api/leads — create a lead
+// ════════════════════════════════════════════════════════════════════════════════
+router.post('/', authenticateToken, validate(createLeadSchema), async (req: AuthRequest, res: Response) => {
+  try {
+    const defaultStage = await getDefaultStage();
+
+    const leadData = {
+      ...req.body,
+      uploadedBy: req.user!.id,
+      pipelineStage: req.body.pipelineStage || defaultStage?._id || null,
+      status: req.body.status || 'new',
+      source: req.body.source || 'manual',
+    };
+
+    const lead = new Lead(leadData);
+    await lead.save();
+
+    // Log activity
+    await Activity.create({
+      leadId: lead._id,
+      userId: req.user!.id,
+      type: 'upload',
+      description: `Lead created by ${req.user!.name}`,
+    });
+
+    const populated = await Lead.findById(lead._id).populate(LEAD_POPULATE);
+
+    emitLeadChangedToRoles('created', { leadId: lead._id.toString() });
+    res.status(201).json(populated);
+  } catch (err: any) {
+    console.error('POST /api/leads error:', err);
+    if (err.code === 11000) {
+      return res.status(409).json({ error: 'A lead with this email already exists' });
+    }
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
+// PATCH /api/leads/:id — update a lead (with optimistic concurrency)
+// ════════════════════════════════════════════════════════════════════════════════
+router.patch('/:id', authenticateToken, checkPermission('leads', 'edit'), validate(updateLeadSchema), async (req: AuthRequest, res: Response) => {
   try {
     const lead = await Lead.findById(req.params.id);
     if (!lead) return res.status(404).json({ error: 'Lead not found' });
-    res.json(lead);
-  } catch (err) {
+
+    const role = req.user!.role;
+    if ((role === 'sdr' || role === 'closer') && lead.assignedTo?.toString() !== req.user!.id) {
+      return res.status(403).json({ error: 'Not authorized to edit this lead' });
+    }
+
+    const oldStatus = lead.status;
+    const updates = req.body; // already sanitized and whitelisted by Zod strip()
+
+    // Apply updates
+    Object.keys(updates).forEach((key) => {
+      (lead as any)[key] = updates[key];
+    });
+
+    await lead.save(); // optimistic concurrency checks __v
+
+    // Log status change activity
+    if (updates.status && updates.status !== oldStatus) {
+      await Activity.create({
+        leadId: lead._id,
+        userId: req.user!.id,
+        type: 'status_change',
+        fromStatus: oldStatus,
+        toStatus: updates.status,
+        description: `Status changed from "${oldStatus}" to "${updates.status}"`,
+      });
+    }
+
+    const populated = await Lead.findById(lead._id).populate(LEAD_POPULATE);
+
+    emitLeadChangedToRoles('updated', {
+      leadId: lead._id.toString(),
+      assignedUserId: lead.assignedTo?.toString(),
+    });
+
+    res.json(populated);
+  } catch (err: any) {
+    if (err.name === 'VersionError') {
+      return res.status(409).json({
+        error: 'This lead was modified by another user. Please refresh and try again.',
+      });
+    }
+    console.error('PATCH /api/leads/:id error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// POST /api/leads
-router.post('/', auth, async (req: AuthRequest, res: Response) => {
+// ════════════════════════════════════════════════════════════════════════════════
+// DELETE /api/leads/:id — soft delete (admin only)
+// ════════════════════════════════════════════════════════════════════════════════
+router.delete('/:id', authenticateToken, checkPermission('leads', 'delete'), async (req: AuthRequest, res: Response) => {
   try {
-    const User = (await import('../models/User')).default;
-    const currentUser = req.user?.id ? await User.findById(req.user.id) : null;
-    const sanitizedBody = pickAllowedFields(req.body, LEAD_WRITABLE_FIELDS);
-    const lead = new Lead({ ...sanitizedBody, addedBy: currentUser?.name || 'Unknown' });
+    // Query with isDeleted override to find the lead even if already soft-deleted check later
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    lead.isDeleted = true;
+    lead.deletedAt = new Date();
+    lead.deletedBy = new mongoose.Types.ObjectId(req.user!.id);
     await lead.save();
 
-    // Create notification for new lead
-    await notifyNewLead(lead._id.toString(), lead.name, lead.assignedAgent);
-    emitLeadChange('created', { leadId: lead._id });
-    res.status(201).json(lead);
+    emitLeadChangedToRoles('deleted', { leadId: lead._id.toString() });
+    res.json({ message: 'Lead deleted' });
   } catch (err) {
+    console.error('DELETE /api/leads/:id error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// POST /api/leads/import/preview — preview column mapping before import
-router.post('/import/preview', auth, upload.single('file'), async (req: AuthRequest, res: Response) => {
+// ════════════════════════════════════════════════════════════════════════════════
+// POST /api/leads/bulk-upload — CSV upload
+// ════════════════════════════════════════════════════════════════════════════════
+router.post('/bulk-upload', authenticateToken, checkPermission('leads', 'upload'), upload.single('file'), async (req: AuthRequest, res: Response) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ error: 'No file uploaded' });
+    }
+
+    const csvContent = req.file.buffer.toString('utf-8');
+    const lines = csvContent.split('\n').map((l) => l.trim()).filter(Boolean);
+
+    if (lines.length < 2) {
+      return res.status(400).json({ error: 'CSV must have a header row and at least one data row' });
+    }
+
+    if (lines.length > 1001) {
+      return res.status(400).json({ error: 'CSV must contain at most 1000 data rows' });
+    }
+
+    // Parse header
+    const headerLine = lines[0];
+    const headers = headerLine.split(',').map((h) => h.trim().replace(/^"|"$/g, '').toLowerCase());
+
+    // Column mapping (case-insensitive, flexible)
+    const colMap: Record<string, string> = {};
+    const FIELD_ALIASES: Record<string, string[]> = {
+      firstName: ['first_name', 'firstname', 'first name', 'fname'],
+      lastName: ['last_name', 'lastname', 'last name', 'lname'],
+      email: ['email', 'email_address', 'emailaddress', 'e-mail'],
+      phone: ['phone', 'phone_number', 'phonenumber', 'telephone', 'tel'],
+      company: ['company', 'company_name', 'companyname', 'organization', 'org'],
+      jobTitle: ['job_title', 'jobtitle', 'title', 'position', 'role'],
+      source: ['source', 'lead_source', 'leadsource'],
+      website: ['website', 'url', 'web'],
+      address: ['address', 'street', 'street_address'],
+      city: ['city'],
+      state: ['state', 'province', 'region'],
+      notes: ['notes', 'note', 'comments', 'description'],
+    };
+
+    for (const [field, aliases] of Object.entries(FIELD_ALIASES)) {
+      const idx = headers.findIndex((h) => aliases.includes(h));
+      if (idx !== -1) {
+        colMap[field] = headers[idx];
+      }
+    }
+
+    // If there's a single "name" column, use it for firstName
+    if (!colMap.firstName) {
+      const nameIdx = headers.findIndex((h) => h === 'name' || h === 'full_name' || h === 'fullname');
+      if (nameIdx !== -1) colMap.firstName = headers[nameIdx];
+    }
+
+    const defaultStage = await getDefaultStage();
+    const errors: { row: number; error: string }[] = [];
+    const emailsSeen = new Set<string>();
+    let duplicatesInFile = 0;
+    let duplicatesInDB = 0;
+    const leadsToInsert: any[] = [];
+
+    // Parse data rows
+    for (let i = 1; i < lines.length; i++) {
+      try {
+        // Simple CSV parsing (handles quoted fields with commas)
+        const values: string[] = [];
+        let current = '';
+        let inQuote = false;
+        for (const char of lines[i]) {
+          if (char === '"') {
+            inQuote = !inQuote;
+          } else if (char === ',' && !inQuote) {
+            values.push(current.trim());
+            current = '';
+          } else {
+            current += char;
+          }
+        }
+        values.push(current.trim());
+
+        const getVal = (field: string) => {
+          const header = colMap[field];
+          if (!header) return '';
+          const idx = headers.indexOf(header);
+          return idx >= 0 ? sanitizeCsvValue(values[idx] || '') : '';
+        };
+
+        const firstName = getVal('firstName');
+        const lastName = getVal('lastName');
+        const email = getVal('email').toLowerCase();
+
+        // Validate: need at least email or name
+        if (!email && !firstName && !lastName) {
+          errors.push({ row: i + 1, error: 'Missing both email and name' });
+          continue;
+        }
+
+        // Deduplicate within file
+        if (email) {
+          if (emailsSeen.has(email)) {
+            duplicatesInFile++;
+            continue;
+          }
+          emailsSeen.add(email);
+        }
+
+        leadsToInsert.push({
+          firstName: firstName || '',
+          lastName: lastName || '',
+          email,
+          phone: getVal('phone'),
+          company: getVal('company'),
+          jobTitle: getVal('jobTitle'),
+          website: getVal('website'),
+          address: getVal('address'),
+          city: getVal('city'),
+          state: getVal('state'),
+          notes: getVal('notes'),
+          source: 'csv_upload' as const,
+          uploadedBy: new mongoose.Types.ObjectId(req.user!.id),
+          pipelineStage: defaultStage?._id || null,
+          status: 'new' as const,
+        });
+      } catch {
+        errors.push({ row: i + 1, error: 'Failed to parse row' });
+      }
+    }
+
+    // Deduplicate against DB by email
+    const emailsToCheck = leadsToInsert.filter((l) => l.email).map((l) => l.email);
+    if (emailsToCheck.length > 0) {
+      const existing = await Lead.find({ email: { $in: emailsToCheck } }).select('email').lean();
+      const existingEmails = new Set(existing.map((e: any) => e.email));
+      const filtered = leadsToInsert.filter((l) => {
+        if (l.email && existingEmails.has(l.email)) {
+          duplicatesInDB++;
+          return false;
+        }
+        return true;
+      });
+      leadsToInsert.length = 0;
+      leadsToInsert.push(...filtered);
+    }
+
+    // Bulk insert
+    let createdLeads: any[] = [];
+    if (leadsToInsert.length > 0) {
+      createdLeads = await Lead.insertMany(leadsToInsert, { ordered: false });
+
+      // Log upload activities
+      const activityDocs = createdLeads.map((lead: any) => ({
+        leadId: lead._id,
+        userId: new mongoose.Types.ObjectId(req.user!.id),
+        type: 'upload' as const,
+        description: `Lead uploaded via CSV by ${req.user!.name}`,
+      }));
+      await Activity.insertMany(activityDocs, { ordered: false });
+    }
+
+    emitLeadChangedToRoles('bulk_created', { count: createdLeads.length });
+
+    res.json({
+      totalRows: lines.length - 1,
+      created: createdLeads.length,
+      duplicatesInFile,
+      duplicatesInDB,
+      errors,
+    });
+  } catch (err) {
+    console.error('POST /api/leads/bulk-upload error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
+// POST /api/leads/:id/assign — assign lead to user
+// ════════════════════════════════════════════════════════════════════════════════
+router.post('/:id/assign', authenticateToken, checkPermission('leads', 'assign'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { assignedTo } = req.body;
+    if (!assignedTo) return res.status(400).json({ error: 'assignedTo is required' });
+
+    // Validate target user is SDR or closer
+    const targetUser = await User.findById(assignedTo);
+    if (!targetUser) return res.status(404).json({ error: 'Target user not found' });
+    if (!['sdr', 'closer'].includes(targetUser.role)) {
+      return res.status(400).json({ error: 'Leads can only be assigned to SDRs or Closers' });
+    }
+
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    const previousAssignee = lead.assignedTo?.toString() || null;
+    lead.assignedTo = new mongoose.Types.ObjectId(assignedTo);
+    lead.assignedAt = new Date();
+    await lead.save();
+
+    // Log activity
+    await Activity.create({
+      leadId: lead._id,
+      userId: req.user!.id,
+      type: 'assignment',
+      description: `Lead assigned to ${targetUser.name} by ${req.user!.name}`,
+      metadata: { previousAssignee, newAssignee: assignedTo },
+    });
+
+    const populated = await Lead.findById(lead._id).populate(LEAD_POPULATE);
+
+    emitLeadChangedToRoles('assigned', {
+      leadId: lead._id.toString(),
+      assignedUserId: assignedTo,
+    });
+
+    res.json(populated);
+  } catch (err) {
+    console.error('POST /api/leads/:id/assign error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
+// POST /api/leads/bulk-assign — assign multiple leads
+// ════════════════════════════════════════════════════════════════════════════════
+router.post('/bulk-assign', authenticateToken, checkPermission('leads', 'assign'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { leadIds, assignedTo, teamId, method } = req.body;
+
+    if (!leadIds || !Array.isArray(leadIds) || leadIds.length === 0) {
+      return res.status(400).json({ error: 'leadIds array is required' });
+    }
+
+    let assignees: string[] = [];
+
+    if (method === 'round_robin' && teamId) {
+      // Get active SDR members of the team
+      const team = await Team.findById(teamId).populate('members', 'role isActive');
+      if (!team) return res.status(404).json({ error: 'Team not found' });
+
+      assignees = (team.members as any[])
+        .filter((m: any) => m.isActive && ['sdr', 'closer'].includes(m.role))
+        .map((m: any) => m._id.toString());
+
+      if (assignees.length === 0) {
+        return res.status(400).json({ error: 'No active SDRs/closers in this team' });
+      }
+    } else if (assignedTo) {
+      const targetUser = await User.findById(assignedTo);
+      if (!targetUser || !['sdr', 'closer'].includes(targetUser.role)) {
+        return res.status(400).json({ error: 'Target user must be an SDR or Closer' });
+      }
+      assignees = [assignedTo];
+    } else {
+      return res.status(400).json({ error: 'Provide assignedTo or teamId+method' });
+    }
+
+    const results: any[] = [];
+    const activities: any[] = [];
+
+    for (let i = 0; i < leadIds.length; i++) {
+      const lead = await Lead.findById(leadIds[i]);
+      if (!lead) continue;
+
+      const targetId = assignees[i % assignees.length];
+      lead.assignedTo = new mongoose.Types.ObjectId(targetId);
+      lead.assignedAt = new Date();
+      await lead.save();
+
+      activities.push({
+        leadId: lead._id,
+        userId: new mongoose.Types.ObjectId(req.user!.id),
+        type: 'assignment' as const,
+        description: `Lead assigned via bulk assignment by ${req.user!.name}`,
+        metadata: { newAssignee: targetId },
+      });
+
+      results.push({ leadId: lead._id.toString(), assignedTo: targetId });
+    }
+
+    if (activities.length > 0) {
+      await Activity.insertMany(activities, { ordered: false });
+    }
+
+    emitLeadChangedToRoles('bulk_assigned', { count: results.length });
+    res.json({ assigned: results.length, results });
+  } catch (err) {
+    console.error('POST /api/leads/bulk-assign error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
+// POST /api/leads/:id/unassign — remove assignment
+// ════════════════════════════════════════════════════════════════════════════════
+router.post('/:id/unassign', authenticateToken, checkPermission('leads', 'assign'), async (req: AuthRequest, res: Response) => {
+  try {
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    const previousAssignee = lead.assignedTo?.toString() || null;
+    lead.assignedTo = null;
+    lead.assignedAt = null;
+    await lead.save();
+
+    await Activity.create({
+      leadId: lead._id,
+      userId: req.user!.id,
+      type: 'assignment',
+      description: `Lead unassigned by ${req.user!.name}`,
+      metadata: { previousAssignee, newAssignee: null },
+    });
+
+    const populated = await Lead.findById(lead._id).populate(LEAD_POPULATE);
+    emitLeadChangedToRoles('unassigned', { leadId: lead._id.toString() });
+    res.json(populated);
+  } catch (err) {
+    console.error('POST /api/leads/:id/unassign error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
+// POST /api/leads/:id/complete-followup — mark follow-up as complete
+// ════════════════════════════════════════════════════════════════════════════════
+router.post('/:id/complete-followup', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    const role = req.user!.role;
+    if (role !== 'admin' && role !== 'manager' && lead.assignedTo?.toString() !== req.user!.id) {
+      return res.status(403).json({ error: 'Not authorized to complete this follow-up' });
+    }
+
+    // Mark latest incomplete follow_up activity for this lead as complete
+    const followUp = await Activity.findOne({
+      leadId: lead._id,
+      type: 'follow_up',
+      isCompleted: false,
+    }).sort({ scheduledAt: 1 });
+
+    if (followUp) {
+      followUp.isCompleted = true;
+      followUp.completedAt = new Date();
+      await followUp.save();
+    }
+
+    await Activity.create({
+      leadId: lead._id,
+      userId: req.user!.id,
+      type: 'follow_up',
+      description: `Follow-up completed by ${req.user!.name}`,
+      isCompleted: true,
+      completedAt: new Date(),
+    });
+
+    emitLeadChangedToRoles('updated', { leadId: lead._id.toString() });
+    res.json({ message: 'Follow-up completed' });
+  } catch (err) {
+    console.error('POST /api/leads/:id/complete-followup error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
+// POST /api/leads/:id/schedule-followup — schedule a follow-up
+// ════════════════════════════════════════════════════════════════════════════════
+router.post('/:id/schedule-followup', authenticateToken, async (req: AuthRequest, res: Response) => {
+  try {
+    const { date } = req.body;
+    if (!date) return res.status(400).json({ error: 'date is required' });
+
+    const lead = await Lead.findById(req.params.id);
+    if (!lead) return res.status(404).json({ error: 'Lead not found' });
+
+    // Ownership check: only admin/manager or the assigned agent can schedule follow-ups
+    const schedRole = req.user!.role;
+    if (schedRole !== 'admin' && schedRole !== 'manager' && lead.assignedTo?.toString() !== req.user!.id) {
+      return res.status(403).json({ error: 'Not authorized to schedule follow-ups for this lead' });
+    }
+
+    const activity = await Activity.create({
+      leadId: lead._id,
+      userId: req.user!.id,
+      type: 'follow_up',
+      description: `Follow-up scheduled for ${new Date(date).toLocaleDateString()}`,
+      scheduledAt: new Date(date),
+      isCompleted: false,
+    });
+
+    emitLeadChangedToRoles('updated', { leadId: lead._id.toString() });
+    res.status(201).json(activity);
+  } catch (err) {
+    console.error('POST /api/leads/:id/schedule-followup error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
+// POST /api/leads/bulk-delete — soft delete multiple leads (admin only)
+// ════════════════════════════════════════════════════════════════════════════════
+router.post('/bulk-delete', authenticateToken, checkPermission('leads', 'delete'), async (req: AuthRequest, res: Response) => {
+  try {
+    const { leadIds } = req.body;
+    if (!Array.isArray(leadIds) || leadIds.length === 0) {
+      return res.status(400).json({ error: 'leadIds array is required' });
+    }
+
+    const result = await Lead.updateMany(
+      { _id: { $in: leadIds.map((id: string) => new mongoose.Types.ObjectId(id)) } },
+      {
+        $set: {
+          isDeleted: true,
+          deletedAt: new Date(),
+          deletedBy: new mongoose.Types.ObjectId(req.user!.id),
+        },
+      }
+    );
+
+    emitLeadChangedToRoles('bulk_deleted', { count: result.modifiedCount });
+    res.json({ deleted: result.modifiedCount });
+  } catch (err) {
+    console.error('POST /api/leads/bulk-delete error:', err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════════════
+// POST /api/leads/import/preview — CSV import preview with column mapping
+// ════════════════════════════════════════════════════════════════════════════════
+router.post('/import/preview', authenticateToken, checkPermission('leads', 'upload'), upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-    const { headers, rows } = parseSpreadsheet(req.file.buffer, req.file.originalname);
-    if (rows.length === 0) {
-      return res.status(400).json({ error: 'File has no data rows' });
+    const csvContent = req.file.buffer.toString('utf-8');
+    const lines = csvContent.split('\n').map((l) => l.trim()).filter(Boolean);
+
+    if (lines.length < 2) {
+      return res.status(400).json({ error: 'CSV must have a header and at least one data row' });
     }
 
-    // Run robust column mapping
-    const mapping = mapColumns(headers);
+    const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
+
+    // Parse first 5 rows for preview
+    const preview: Record<string, string>[] = [];
+    for (let i = 1; i < Math.min(lines.length, 6); i++) {
+      const values: string[] = [];
+      let current = '';
+      let inQuote = false;
+      for (const char of lines[i]) {
+        if (char === '"') { inQuote = !inQuote; }
+        else if (char === ',' && !inQuote) { values.push(current.trim()); current = ''; }
+        else { current += char; }
+      }
+      values.push(current.trim());
+
+      const row: Record<string, string> = {};
+      headers.forEach((h, idx) => { row[h] = values[idx] || ''; });
+      preview.push(row);
+    }
+
+    // Auto-map columns using csvColumnMapper if available
+    let mappings: Record<string, string | null> = {};
+    try {
+      const { mapColumns } = await import('../utils/csvColumnMapper.js');
+      const result = mapColumns(headers);
+      mappings = result.headerMap;
+    } catch {
+      // Fallback: basic lowercase matching
+      const basicFields = ['firstName', 'lastName', 'email', 'phone', 'company', 'jobTitle', 'source', 'website', 'address', 'city', 'state', 'notes'];
+      for (const h of headers) {
+        const lower = h.toLowerCase().replace(/[_\s]+/g, '');
+        const match = basicFields.find(f => f.toLowerCase() === lower);
+        mappings[h] = match || null;
+      }
+    }
 
     res.json({
       headers,
-      mappings: mapping.mappings,
-      unmapped: mapping.unmapped,
-      mergeRules: mapping.mergeRules,
-      sampleRows: rows.slice(0, 5),
-      totalRows: rows.length,
+      totalRows: lines.length - 1,
+      preview,
+      mappings,
     });
-  } catch (err: any) {
-    console.error('Import preview error:', err);
-    res.status(500).json({ error: `Preview failed: ${err.message}` });
+  } catch (err) {
+    console.error('POST /api/leads/import/preview error:', err);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
-// POST /api/leads/import — bulk import (CSV, TSV, Excel)
-router.post('/import', auth, upload.single('file'), async (req: AuthRequest, res: Response) => {
+// ════════════════════════════════════════════════════════════════════════════════
+// POST /api/leads/import — CSV import with custom mappings
+// ════════════════════════════════════════════════════════════════════════════════
+router.post('/import', authenticateToken, checkPermission('leads', 'upload'), upload.single('file'), async (req: AuthRequest, res: Response) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-    // Parse file using SheetJS
-    const { headers, rows } = parseSpreadsheet(req.file.buffer, req.file.originalname);
-    console.log(`[Import] File: ${req.file.originalname}, Headers: [${headers.join(', ')}], Rows: ${rows.length}`);
+    const customMappings: Record<string, string | null> = req.body.customMappings
+      ? JSON.parse(req.body.customMappings)
+      : null;
 
-    if (rows.length === 0) {
-      return res.status(400).json({ error: 'File has no data rows' });
-    }
+    const csvContent = req.file.buffer.toString('utf-8');
+    const lines = csvContent.split('\n').map((l) => l.trim()).filter(Boolean);
+    if (lines.length < 2) return res.status(400).json({ error: 'CSV must have a header and at least one data row' });
 
-    // ── Build column mapping ──────────────────────────────────────────────
-    // Use robust mapper, then apply any user-provided overrides
-    const autoMapping = mapColumns(headers);
-    let { headerMap, unmapped, mergeRules } = autoMapping;
+    const headers = lines[0].split(',').map((h) => h.trim().replace(/^"|"$/g, ''));
 
-    // Accept optional custom mappings from the frontend (user overrides)
-    const customMappings: Record<string, string | null> | undefined =
-      req.body?.customMappings ? JSON.parse(req.body.customMappings) : undefined;
-
+    // Determine field mapping
+    let fieldMap: Record<string, string | null> = {};
     if (customMappings) {
-      for (const [csvHeader, crmField] of Object.entries(customMappings)) {
-        headerMap[csvHeader] = crmField;
-      }
-      // Recalculate unmapped
-      unmapped = headers.filter(h => !headerMap[h]);
-    }
-
-    console.log(`[Import] Mapped: ${Object.values(headerMap).filter(Boolean).length}/${headers.length} columns. Unmapped: [${unmapped.join(', ')}]`);
-    if (mergeRules.length > 0) {
-      console.log(`[Import] Merge rules: ${mergeRules.map(r => `${r.sourceHeaders.join(' + ')} → ${r.targetField}`).join(', ')}`);
-    }
-
-    // Get current user for default agent assignment
-    const User = (await import('../models/User')).default;
-    const currentUserId = req.user?.id;
-    const currentUser = currentUserId ? await User.findById(currentUserId) : null;
-    const defaultAgent = currentUser?.name || 'Unassigned';
-
-    const imported: any[] = [];
-    const errors: { row: number; error: string }[] = [];
-
-    for (let i = 0; i < rows.length; i++) {
+      fieldMap = customMappings;
+    } else {
       try {
-        let row = rows[i];
-
-        // Apply merge rules (e.g. first name + last name → name)
-        if (mergeRules.length > 0) {
-          row = applyMergeRules(row, mergeRules);
+        const { mapColumns } = await import('../utils/csvColumnMapper.js');
+        fieldMap = mapColumns(headers).headerMap;
+      } catch {
+        // Basic fallback
+        const basicFields = ['firstName', 'lastName', 'email', 'phone', 'company', 'jobTitle'];
+        for (const h of headers) {
+          const lower = h.toLowerCase().replace(/[_\s]+/g, '');
+          fieldMap[h] = basicFields.find(f => f.toLowerCase() === lower) || null;
         }
-
-        // Build document with safe defaults for ALL enum fields
-        const doc: any = {
-          date: new Date(),
-          source: 'CSV Import',
-          status: 'New Lead',
-          assignedAgent: defaultAgent,
-          addedBy: defaultAgent,
-          priority: 'C',
-          segment: '',
-          sourceChannel: '',
-          qualityGatePass: false,
-        };
-
-        // Map known columns from the spreadsheet
-        for (const [header, value] of Object.entries(row)) {
-          const field = headerMap[header];
-          if (!field || !value) continue;
-
-          const v = String(value).trim();
-          if (!v) continue;
-
-          if (field === 'employeeCount') {
-            const num = parseInt(v.replace(/[^0-9]/g, ''), 10);
-            if (!isNaN(num)) doc[field] = num;
-          } else if (field === 'revenue') {
-            const num = parseFloat(v.replace(/[^0-9.]/g, ''));
-            if (!isNaN(num)) doc[field] = num;
-          } else if (field === 'nextFollowUp' || field === 'date') {
-            const d = new Date(v);
-            if (!isNaN(d.getTime())) doc[field] = d;
-          } else if (field === 'priority') {
-            // Normalise priority values
-            const upper = v.toUpperCase();
-            if (['A', 'B', 'C'].includes(upper)) doc[field] = upper;
-            else if (['HIGH', '1', 'HOT'].includes(upper)) doc[field] = 'A';
-            else if (['MEDIUM', 'MED', '2', 'WARM'].includes(upper)) doc[field] = 'B';
-            else doc[field] = 'C';
-          } else if (field === 'segment') {
-            // Smart industry → segment mapping
-            const VALID_SEGMENTS = ['Insurance', 'Accounting', 'Finance', 'Healthcare', 'Legal', 'Other'];
-            const segMatch = VALID_SEGMENTS.find(s => s.toLowerCase() === v.toLowerCase());
-            if (segMatch) {
-              doc[field] = segMatch;
-            } else {
-              // Put industry in notes if it doesn't match a segment
-              doc.notes = (doc.notes || '') + (doc.notes ? '\n' : '') + `Industry: ${v}`;
-            }
-          } else {
-            doc[field] = v;
-          }
-        }
-
-        // Handle merge rule results (e.g. merged 'name' field)
-        for (const rule of mergeRules) {
-          if (rule.targetField === 'name' && row[rule.targetField] && !doc.name) {
-            doc.name = row[rule.targetField];
-          }
-        }
-
-        // ── AUTO-CORRECT name / title / companyName rotation ──
-        // Some CSV exports have the first 3 columns shifted:
-        //   Column "Company Name" → actually a person name
-        //   Column "Name"         → actually a job title
-        //   Column "Title"        → actually a company name
-        // Detect this per-row using content heuristics and swap back.
-        {
-          const n = (doc.name || '').trim();
-          const t = (doc.title || '').trim();
-          const c = (doc.companyName || '').trim();
-
-          if (n && t && c) {
-            const COMPANY_RE = /\b(inc|llc|ltd|corp|co\b|company|companies|group|services|solutions|agency|agencies|insurance|financial|bank|international|industries|associates|partners|consulting|advisors|enterprises|limited|holdings|capital|mutual|national|underwriters|global|systems|technologies|networks)\b/i;
-            const TITLE_RE = /\b(president|ceo|cfo|coo|cto|cio|vp|vice\s+president|director|manager|officer|partner|founder|owner|principal|chief|head\s+of|evp|svp|avp|sr\b|senior|associate|analyst|coordinator|administrator|executive|chairman|chairwoman|chairperson|secretary|treasurer|counsel|controller|actuary|underwriter|broker|agent|advisor|consultant|specialist|supervisor|superintendent|lead\b)\b/i;
-
-            const nameIsTitle = TITLE_RE.test(n);
-            const nameIsCompany = COMPANY_RE.test(n);
-            const titleIsCompany = COMPANY_RE.test(t);
-            const titleIsName = !TITLE_RE.test(t) && !COMPANY_RE.test(t) && t.split(/\s+/).length <= 4;
-            const compIsTitle = TITLE_RE.test(c);
-            const compIsName = !COMPANY_RE.test(c) && !TITLE_RE.test(c) && c.split(/\s+/).length <= 4;
-
-            // Pattern 1: Rotation — name has title, title has company, company has name
-            if (nameIsTitle && titleIsCompany && compIsName) {
-              doc.name = c;
-              doc.title = n;
-              doc.companyName = t;
-            }
-            // Pattern 2: name has company, company has name (two-way swap)
-            else if (nameIsCompany && compIsName && !nameIsTitle) {
-              doc.name = c;
-              doc.companyName = n;
-            }
-            // Pattern 3: name has title, title has name (two-way swap)
-            else if (nameIsTitle && titleIsName) {
-              doc.name = t;
-              doc.title = n;
-            }
-            // Pattern 4: title has company, company has title
-            else if (titleIsCompany && compIsTitle) {
-              doc.title = c;
-              doc.companyName = t;
-            }
-          }
-        }
-
-        // Collect data from unknown columns → notes
-        const extraFields: string[] = [];
-        for (const header of unmapped) {
-          const val = row[header];
-          if (val && String(val).trim()) extraFields.push(`${header}: ${String(val).trim()}`);
-        }
-        if (extraFields.length > 0) {
-          doc.notes = (doc.notes || '') + (doc.notes ? '\n' : '') + extraFields.join(' | ');
-        }
-
-        // ── SANITIZE ALL ENUM FIELDS ──
-        // Name: REQUIRED — must be non-empty
-        if (!doc.name || !String(doc.name).trim()) {
-          doc.name = doc.email || doc.companyName || doc.title || `Lead Row ${i + 2}`;
-        }
-        doc.name = String(doc.name).trim().substring(0, 200);
-
-        // Source: must be a valid enum value
-        if (!VALID_SOURCES.includes(doc.source)) {
-          if (doc.source) doc.notes = (doc.notes || '') + `\nOriginal source: ${doc.source}`;
-          doc.source = 'CSV Import';
-        }
-
-        // Status: must be a valid enum value
-        if (!VALID_STATUSES.includes(doc.status)) {
-          if (doc.status) doc.notes = (doc.notes || '') + `\nOriginal status: ${doc.status}`;
-          doc.status = 'New Lead';
-        }
-
-        // Priority: must be A, B, or C
-        if (!['A', 'B', 'C'].includes(doc.priority)) {
-          doc.priority = 'C';
-        }
-
-        // Segment: must be valid enum or empty
-        const VALID_SEGMENTS = ['Insurance', 'Accounting', 'Finance', 'Healthcare', 'Legal', 'Other', ''];
-        if (!VALID_SEGMENTS.includes(doc.segment || '')) {
-          doc.segment = '';
-        }
-
-        // Deduplication: skip if a lead with the same email or phone already exists
-        {
-          const normEmail = doc.email ? String(doc.email).trim().toLowerCase() : null;
-          const normPhone = doc.workDirectPhone || doc.mobilePhone || null;
-          const dupFilter: Record<string, unknown>[] = [];
-          if (normEmail) {
-            // Escape special chars for regex or just use direct match
-            const escapedEmail = normEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            dupFilter.push({ email: { $regex: new RegExp(`^${escapedEmail}$`, 'i') } });
-          }
-          if (normPhone) dupFilter.push({ workDirectPhone: normPhone }, { mobilePhone: normPhone });
-          if (dupFilter.length > 0) {
-            const existing = await Lead.findOne({ $or: dupFilter }).lean();
-            if (existing) {
-              errors.push({ row: i + 2, error: `Duplicate: lead with matching email/phone already exists` });
-              continue;
-            }
-          }
-        }
-
-        // Activities and stageHistory
-        doc.activities = [{ type: 'note', description: 'Lead imported via CSV', timestamp: new Date(), agent: defaultAgent }];
-        doc.stageHistory = [{ stage: doc.status, enteredAt: new Date(), agent: defaultAgent }];
-
-        // Save with try/catch — if it STILL fails, retry with minimal doc
-        try {
-          const lead = new Lead(doc);
-          await lead.save();
-          imported.push(lead);
-        } catch (saveErr: any) {
-          console.error(`[Import] Row ${i + 2} save failed: ${saveErr.message} — retrying with minimal doc`);
-          try {
-            const minimalDoc = {
-              name: doc.name || `Lead Row ${i + 2}`,
-              assignedAgent: defaultAgent,
-              addedBy: defaultAgent,
-              source: 'CSV Import',
-              status: 'New Lead',
-              date: new Date(),
-              priority: 'C',
-              segment: '',
-              email: doc.email || '',
-              companyName: doc.companyName || '',
-              title: doc.title || '',
-              notes: `Import retry — original save failed: ${saveErr.message}\n${doc.notes || ''}`,
-              activities: [{ type: 'note', description: 'Lead imported via CSV (retry)', timestamp: new Date(), agent: defaultAgent }],
-              stageHistory: [{ stage: 'New Lead', enteredAt: new Date(), agent: defaultAgent }],
-            };
-            const retryLead = new Lead(minimalDoc);
-            await retryLead.save();
-            imported.push(retryLead);
-          } catch (retryErr: any) {
-            console.error(`[Import] Row ${i + 2} retry also failed: ${retryErr.message}`);
-            errors.push({ row: i + 2, error: saveErr.message });
-          }
-        }
-      } catch (e: any) {
-        console.error(`[Import] Row ${i + 2} parse error:`, e.message);
-        errors.push({ row: i + 2, error: e.message });
       }
     }
 
-    // Create notification for successful import
-    if (imported.length > 0 && req.user?.id) {
-      await notifyLeadImported(imported.length, req.user.id);
-      emitLeadChange('imported', { count: imported.length });
+    const defaultStage = await getDefaultStage();
+    const errors: { row: number; error: string }[] = [];
+    const emailsSeen = new Set<string>();
+    let duplicatesInFile = 0;
+    let duplicatesInDB = 0;
+    const leadsToInsert: any[] = [];
+
+    for (let i = 1; i < lines.length; i++) {
+      try {
+        const values: string[] = [];
+        let current = '';
+        let inQuote = false;
+        for (const char of lines[i]) {
+          if (char === '"') { inQuote = !inQuote; }
+          else if (char === ',' && !inQuote) { values.push(current.trim()); current = ''; }
+          else { current += char; }
+        }
+        values.push(current.trim());
+
+        const row: Record<string, string> = {};
+        headers.forEach((h, idx) => {
+          const field = fieldMap[h];
+          if (field) row[field] = sanitizeCsvValue(values[idx] || '');
+        });
+
+        const email = (row.email || '').toLowerCase();
+
+        // Need email or name
+        if (!email && !row.firstName && !row.lastName && !row.name) {
+          errors.push({ row: i + 1, error: 'Missing both email and name' });
+          continue;
+        }
+
+        if (email) {
+          if (emailsSeen.has(email)) { duplicatesInFile++; continue; }
+          emailsSeen.add(email);
+        }
+
+        // Handle single 'name' field split into firstName/lastName
+        let firstName = row.firstName || '';
+        let lastName = row.lastName || '';
+        if (!firstName && !lastName && row.name) {
+          const parts = row.name.split(/\s+/);
+          firstName = parts[0] || '';
+          lastName = parts.slice(1).join(' ') || '';
+        }
+
+        leadsToInsert.push({
+          firstName,
+          lastName,
+          email,
+          phone: row.phone || '',
+          company: row.company || row.companyName || '',
+          jobTitle: row.jobTitle || row.title || '',
+          website: row.website || '',
+          address: row.address || '',
+          city: row.city || '',
+          state: row.state || '',
+          notes: row.notes || '',
+          source: 'csv_upload' as const,
+          uploadedBy: new mongoose.Types.ObjectId(req.user!.id),
+          pipelineStage: defaultStage?._id || null,
+          status: 'new' as const,
+        });
+      } catch {
+        errors.push({ row: i + 1, error: 'Failed to parse row' });
+      }
     }
 
-    console.log(`[Import] Done: ${imported.length} imported, ${errors.length} errors out of ${rows.length} rows`);
+    // Deduplicate against DB
+    const emailsToCheck = leadsToInsert.filter(l => l.email).map(l => l.email);
+    if (emailsToCheck.length > 0) {
+      const existing = await Lead.find({ email: { $in: emailsToCheck } }).select('email').lean();
+      const existingEmails = new Set(existing.map((e: any) => e.email));
+      const filtered = leadsToInsert.filter(l => {
+        if (l.email && existingEmails.has(l.email)) { duplicatesInDB++; return false; }
+        return true;
+      });
+      leadsToInsert.length = 0;
+      leadsToInsert.push(...filtered);
+    }
 
-    const duplicateCount = errors.filter(e => e.error.startsWith('Duplicate:')).length;
+    let createdLeads: any[] = [];
+    if (leadsToInsert.length > 0) {
+      createdLeads = await Lead.insertMany(leadsToInsert, { ordered: false });
+      const activityDocs = createdLeads.map((lead: any) => ({
+        leadId: lead._id,
+        userId: new mongoose.Types.ObjectId(req.user!.id),
+        type: 'upload' as const,
+        description: `Lead imported via CSV by ${req.user!.name}`,
+      }));
+      await Activity.insertMany(activityDocs, { ordered: false });
+    }
+
+    emitLeadChangedToRoles('bulk_created', { count: createdLeads.length });
+
     res.json({
-      imported: imported.length,
-      errors: errors.length - duplicateCount,
-      skipped: duplicateCount,
-      errorDetails: errors.slice(0, 50),
-      total: rows.length,
+      totalRows: lines.length - 1,
+      created: createdLeads.length,
+      duplicatesInFile,
+      duplicatesInDB,
+      errors,
     });
-  } catch (err: any) {
-    console.error('Import error:', err);
-    res.status(500).json({ error: `Import failed: ${err.message}` });
-  }
-});
-
-// PUT /api/leads/:id
-router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
-  try {
-    const oldLead = await Lead.findById(req.params.id);
-
-    // Whitelist allowed fields to prevent mass assignment
-    const updateBody = pickAllowedFields(req.body, LEAD_WRITABLE_FIELDS);
-
-    // Track who closed the lead
-    if (updateBody.status === 'Active Account' && oldLead && oldLead.status !== 'Active Account') {
-      const User = (await import('../models/User')).default;
-      const currentUser = req.user?.id ? await User.findById(req.user.id) : null;
-      updateBody.closedBy = currentUser?.name || 'Unknown';
-      updateBody.closedAt = new Date();
-    }
-
-    // Push stageHistory entry on status change
-    const updateQuery: Record<string, any> = { ...updateBody };
-    if (oldLead && updateBody.status && oldLead.status !== updateBody.status) {
-      const User2 = (await import('../models/User')).default;
-      const currentUser2 = req.user?.id ? await User2.findById(req.user.id) : null;
-      updateQuery.$push = {
-        stageHistory: {
-          stage: updateBody.status,
-          enteredAt: new Date(),
-          agent: currentUser2?.name || 'Unknown',
-        },
-      };
-    }
-
-    const lead = await Lead.findByIdAndUpdate(req.params.id, updateQuery, { new: true });
-    if (!lead) return res.status(404).json({ error: 'Lead not found' });
-
-    // Create notification for status change (scoped to this user)
-    if (oldLead && updateBody.status && oldLead.status !== updateBody.status && req.user?.id) {
-      await notifyLeadStatusChange(lead._id.toString(), lead.name, oldLead.status, updateBody.status, req.user.id);
-    }
-    emitLeadChange('updated', { leadId: lead._id });
-    res.json(lead);
   } catch (err) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// POST /api/leads/:id/complete-followup — mark follow-up as complete
-router.post('/:id/complete-followup', auth, async (req: AuthRequest, res: Response) => {
-  try {
-    const User = (await import('../models/User')).default;
-    const currentUser = req.user?.id ? await User.findById(req.user.id) : null;
-    const agentName = currentUser?.name || 'Unknown';
-
-    const lead = await Lead.findById(req.params.id);
-    if (!lead) return res.status(404).json({ error: 'Lead not found' });
-
-    lead.activities.push({
-      type: 'follow-up',
-      description: 'Follow-up completed',
-      timestamp: new Date(),
-      agent: agentName,
-    });
-    lead.nextFollowUp = null;
-    lead.lastActivity = new Date();
-    if (lead.status === 'New Lead') lead.status = 'Working' as any;
-
-    // Optionally update user stats
-    if (currentUser) {
-      currentUser.followUpsCompleted = (currentUser.followUpsCompleted || 0) + 1;
-      currentUser.followUpsPending = Math.max(0, (currentUser.followUpsPending || 0) - 1);
-      await currentUser.save();
-    }
-
-    await lead.save();
-    res.json(lead);
-  } catch (err) {
-    console.error('Complete follow-up error:', err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// POST /api/leads/:id/schedule-followup — schedule a new follow-up
-router.post('/:id/schedule-followup', auth, async (req: AuthRequest, res: Response) => {
-  try {
-    const { date } = req.body;
-    const User = (await import('../models/User')).default;
-    const currentUser = req.user?.id ? await User.findById(req.user.id) : null;
-    const agentName = currentUser?.name || 'Unknown';
-
-    const lead = await Lead.findById(req.params.id);
-    if (!lead) return res.status(404).json({ error: 'Lead not found' });
-
-    lead.nextFollowUp = new Date(date);
-    lead.lastActivity = new Date();
-    if (lead.status === 'New Lead') lead.status = 'Working' as any;
-    lead.activities.push({
-      type: 'follow-up',
-      description: `Follow-up scheduled for ${new Date(date).toISOString().split('T')[0]}`,
-      timestamp: new Date(),
-      agent: agentName,
-    });
-
-    await lead.save();
-
-    // Create notification for follow-up scheduled (scoped to this user)
-    if (req.user?.id) {
-      await notifyFollowUpDue(lead._id.toString(), lead.name, new Date(date), req.user.id);
-    }
-
-    res.json(lead);
-  } catch (err) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// DELETE /api/leads/:id — admin or leadgen
-router.delete('/:id', auth, leadgenOrAdmin, async (req: AuthRequest, res: Response) => {
-  try {
-    const lead = await Lead.findByIdAndDelete(req.params.id);
-    if (!lead) return res.status(404).json({ error: 'Lead not found' });
-    emitLeadChange('deleted', { leadId: req.params.id });
-    res.json({ message: 'Lead deleted' });
-  } catch (err) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// POST /api/leads/bulk-assign — assign multiple leads to an SDR
-router.post('/bulk-assign', auth, leadgenOrAdmin, async (req: AuthRequest, res: Response) => {
-  try {
-    const { leadIds, agentName } = req.body;
-    if (!Array.isArray(leadIds) || !leadIds.length || !agentName) {
-      return res.status(400).json({ error: 'leadIds array and agentName are required' });
-    }
-    const result = await Lead.updateMany(
-      { _id: { $in: leadIds } },
-      { $set: { assignedAgent: String(agentName) } }
-    );
-    emitLeadChange('bulk-assigned', { count: result.modifiedCount, agentName });
-    res.json({ updated: result.modifiedCount });
-  } catch (err) {
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// POST /api/leads/bulk-delete — delete multiple leads at once
-router.post('/bulk-delete', auth, leadgenOrAdmin, async (req: AuthRequest, res: Response) => {
-  try {
-    const { leadIds } = req.body;
-    if (!Array.isArray(leadIds) || !leadIds.length) {
-      return res.status(400).json({ error: 'leadIds array is required' });
-    }
-    const result = await Lead.deleteMany({ _id: { $in: leadIds } });
-    emitLeadChange('bulk-deleted', { count: result.deletedCount });
-    res.json({ deleted: result.deletedCount });
-  } catch (err) {
+    console.error('POST /api/leads/import error:', err);
     res.status(500).json({ error: 'Server error' });
   }
 });

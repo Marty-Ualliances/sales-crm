@@ -37,6 +37,11 @@ export interface Lead {
   date: string;
   source: LeadSource;
   name: string;
+  firstName?: string;
+  lastName?: string;
+  createdAt?: string;
+  pipelineStage?: any;
+  assignedTo?: any;
   title: string;
   companyName: string;
   email: string;

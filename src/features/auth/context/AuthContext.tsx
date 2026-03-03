@@ -3,6 +3,7 @@ import { createContext, useContext, useState, ReactNode, useCallback, useEffect 
 import { useRouter } from 'next/navigation';
 import { AuthUser } from '@/features/auth/types/auth';
 import { api } from '@/services/api';
+import { disconnectSocket } from '@/hooks/useSocket';
 
 interface AuthContextType {
   user: AuthUser | null;
@@ -69,6 +70,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const logout = useCallback(async () => {
     try { await api.auth.logout(); } catch { /* ignore */ }
+    disconnectSocket();
     setUser(null);
     setImpersonatedBy(null);
     sessionStorage.removeItem(USER_KEY);

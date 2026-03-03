@@ -22,8 +22,15 @@ export async function middleware(request: NextRequest) {
 
     // Cryptographically verify JWT signature and expiration
     const secret = process.env.JWT_SECRET;
-    if (secret) {
-      try {
+    if (!secret) {
+      // JWT_SECRET is required — reject request if not configured
+      console.error('MIDDLEWARE: JWT_SECRET environment variable is not set');
+      const loginUrl = new URL('/login', request.url);
+      loginUrl.searchParams.set('returnUrl', pathname);
+      return NextResponse.redirect(loginUrl);
+    }
+
+    try {
         await jwtVerify(token, new TextEncoder().encode(secret));
       } catch {
         // Invalid or expired token — redirect to login
@@ -31,7 +38,7 @@ export async function middleware(request: NextRequest) {
         loginUrl.searchParams.set('returnUrl', pathname);
         return NextResponse.redirect(loginUrl);
       }
-    }
+  }
   }
 
   return NextResponse.next();

@@ -4,6 +4,8 @@ import Link from 'next/link';
 import { ArrowLeft, Phone, Mail, User, Calendar, FileText, RefreshCw, Loader2, Building2, MapPin, Globe, Linkedin, Users, CheckCircle, PhoneCall, Send, ShieldCheck, AlertTriangle, Tag, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useLead, useCalls, useCompleteFollowUp, useUpdateLead, useLeads, useCreateCall, useMeetings, useCreateMeeting, useUpdateMeeting, useAgents } from '@/hooks/useApi';
+import { useLeadActivities, useCreateActivity } from '@/features/activities/hooks/useActivities';
+import { usePipelineStages, useUpdateLeadStage } from '@/features/pipeline/hooks/usePipeline';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { LeadStatus, Employee } from '@/features/leads/types/leads';
 import { getStageBadgeClass, PIPELINE_STAGES, PRIORITIES, getPriorityBadgeClass, SEGMENTS, SOURCE_CHANNELS, checkQualityGate } from '@/features/leads/constants/pipeline';
@@ -49,6 +51,10 @@ export default function LeadDetailPage() {
   const params = useParams();
   const leadId = params?.leadId as string | undefined;
   const { data: lead, isLoading } = useLead(leadId ?? '');
+  const { data: activities = [] } = useLeadActivities(leadId ?? '');
+  const createActivity = useCreateActivity();
+  const { data: stages = [] } = usePipelineStages();
+  const updateStage = useUpdateLeadStage();
   const { data: allCalls = [] } = useCalls();
   const completeFollowUp = useCompleteFollowUp();
   const updateLead = useUpdateLead();
@@ -162,9 +168,12 @@ export default function LeadDetailPage() {
 
   const NEXT_STEP_STAGES = ['qualified', 'proposal sent', 'negotiation'];
 
-  const handleStatusChange = async (status: string) => {
-    const normalized = normalizeStatus(status);
-    if (normalized === 'meeting booked' || normalized === 'appointment set' || normalized === 'appointment set (meeting booked)') {
+  const handleStageChange = async (stageId: string) => {
+    const stage = stages.find(s => s._id === stageId);
+    if (!stage) return;
+
+    const normalized = normalizeStatus(stage.name);
+    if (normalized === 'meeting booked' || normalized === 'appointment set') {
       setShowMeetingBookedModal(true);
       return;
     }
@@ -172,21 +181,12 @@ export default function LeadDetailPage() {
       setShowMeetingCompletedModal(true);
       return;
     }
-    if (normalized === 'active account (closed won)' || normalized === 'closed won' || normalized === 'active account') {
-      setShowActiveAccountModal(true);
-      return;
-    }
-    if (NEXT_STEP_STAGES.includes(normalized)) {
-      setNextStepDate('');
-      setNextStepNote('');
-      setNextStepPrompt({ status: status as LeadStatus });
-      return;
-    }
+
     try {
-      await updateLead.mutateAsync({ id: lead.id, data: { status } });
-      toast.success(`Status changed to ${status}`);
+      await updateStage.mutateAsync({ leadId: leadId as string, stageId: stage._id });
+      toast.success(`Stage changed to ${stage.name}`);
     } catch {
-      toast.error('Failed to update status');
+      toast.error('Failed to update stage');
     }
   };
 
@@ -267,26 +267,10 @@ export default function LeadDetailPage() {
 
   const handleSaveNotes = async () => {
     try {
-      let currentUserName = 'Current User';
-      try {
-        const storedUser = localStorage.getItem('insurelead_user');
-        if (storedUser) {
-          const parsed = JSON.parse(storedUser);
-          currentUserName = parsed.name || 'Current User';
-        }
-      } catch { /* ignore parse error */ }
-
-      const newActivity = {
+      await createActivity.mutateAsync({
+        leadId: lead.id || lead._id,
         type: 'note',
         description: notes,
-        timestamp: new Date().toISOString(),
-        agent: currentUserName,
-      };
-      await updateLead.mutateAsync({
-        id: lead.id,
-        data: {
-          activities: [newActivity, ...(lead.activities || [])]
-        }
       });
       setEditingNotes(false);
       setNotes('');
@@ -377,13 +361,12 @@ export default function LeadDetailPage() {
         id: lead.id,
         data: {
           cadence: { ...lead.cadence, touches: updatedTouches },
-          activities: [...(lead.activities || []), {
-            type: 'cadence-touch',
-            description: activityDesc,
-            timestamp: new Date().toISOString(),
-            agent: lead.assignedAgent || 'System',
-          }]
         }
+      });
+      await createActivity.mutateAsync({
+        leadId: lead.id || lead._id,
+        type: 'cadence-touch',
+        description: activityDesc,
       });
       toast.success('Touch completed');
     } catch {
@@ -412,16 +395,7 @@ export default function LeadDetailPage() {
     !lead.nextFollowUp;
 
   // Normalize activities and stageHistory into a single timeline
-  const combinedHistory = [
-    ...(lead.activities || []),
-    ...(lead.stageHistory || []).map((sh: any, idx: number) => ({
-      id: `sh-${idx}-${sh.enteredAt}`,
-      type: 'status-change',
-      description: `Status changed to ${sh.stage}`,
-      timestamp: sh.enteredAt,
-      agent: sh.agent || 'System',
-    }))
-  ].sort((a: any, b: any) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
+  const combinedHistory = Array.isArray(activities) ? activities : [];
 
   const noteActivities = combinedHistory.filter((a: any) => a.type === 'note');
   const nonNoteActivities = combinedHistory.filter((a: any) => a.type !== 'note');
@@ -516,24 +490,27 @@ export default function LeadDetailPage() {
                 <p className="text-sm font-semibold text-foreground">{lead.assignedAgent || 'Unassigned'}</p>
               </div>
               <select
-                value={lead.status}
-                onChange={(e) => handleStatusChange(e.target.value as LeadStatus)}
-                className={`h-9 w-full cursor-pointer rounded-lg border px-3 text-sm font-semibold outline-none transition-colors ${getStageBadgeClass(lead.status)} focus:ring-2 focus:ring-primary/30`}
+                value={(lead as any).pipelineStage?._id || (lead as any).pipelineStage || ''}
+                onChange={(e) => handleStageChange(e.target.value)}
+                className="h-9 w-full cursor-pointer rounded-lg border px-3 text-sm font-semibold outline-none transition-colors bg-secondary/10 focus:ring-2 focus:ring-primary/30"
               >
-                {PIPELINE_STAGES.map(s => (
-                  <option key={s.key} value={s.key} className="bg-background text-foreground">{s.label}</option>
+                <option value="">— Select Stage —</option>
+                {stages.map((s: any) => (
+                  <option key={s._id} value={s._id} className="bg-background text-foreground">{s.name}</option>
                 ))}
               </select>
               <div className="flex items-center justify-end w-full gap-2 mt-1">
                 <input
                   type="checkbox"
                   id="meeting-completed"
-                  checked={normalizeStatus(lead.status) === 'meeting completed'}
+                  checked={normalizeStatus((lead as any).pipelineStage?.name || lead.status) === 'meeting completed'}
                   onChange={(e) => {
                     if (e.target.checked) {
-                      handleStatusChange('Meeting Completed');
+                      const s = stages.find(s => s.name === 'Meeting Completed');
+                      if (s) handleStageChange(s._id);
                     } else {
-                      handleStatusChange('Meeting Booked');
+                      const s = stages.find(s => s.name === 'Meeting Booked');
+                      if (s) handleStageChange(s._id);
                     }
                   }}
                   className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer accent-primary"
@@ -775,55 +752,101 @@ export default function LeadDetailPage() {
                   )}
 
                   {(lead.employees?.length ?? 0) > 0 ? (
-                    <div className="space-y-2">
+                    <div className="space-y-4">
                       {lead.employees!.map((emp, idx) => (
-                        <div key={emp.id || idx} className="flex items-center gap-3 p-3 rounded-lg border border-border hover:bg-secondary/30 transition-colors">
-                          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-primary text-xs font-bold shrink-0">
-                            {emp.name?.split(' ').map(n => n[0]).join('').slice(0, 2) || '??'}
-                          </div>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <p className="text-sm font-semibold text-foreground truncate">{emp.name}</p>
-                              {emp.isDecisionMaker && (
-                                <span className="inline-flex items-center rounded-full bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[10px] font-medium">
-                                  DM
-                                </span>
-                              )}
-                              {emp.leftOrganization && (
-                                <span className="inline-flex items-center rounded-full bg-destructive/10 text-destructive border border-destructive/20 px-2 py-0.5 text-[10px] font-medium">
-                                  Left Org
-                                </span>
-                              )}
+                        <div key={emp.id || idx} className="rounded-xl border border-border bg-secondary/5 p-5 space-y-4">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex items-center gap-4">
+                              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/20 text-primary text-base font-bold shrink-0">
+                                {emp.name?.split(' ').map(n => n[0]).join('').slice(0, 2) || '??'}
+                              </div>
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-2">
+                                  <p className="text-base font-bold text-foreground truncate">{emp.name}</p>
+                                  {emp.isDecisionMaker && (
+                                    <span className="inline-flex items-center rounded-full bg-primary/10 text-primary border border-primary/20 px-2 py-0.5 text-[10px] font-medium">
+                                      DM
+                                    </span>
+                                  )}
+                                  {emp.leftOrganization && (
+                                    <span className="inline-flex items-center rounded-full bg-destructive/10 text-destructive border border-destructive/20 px-2 py-0.5 text-[10px] font-medium">
+                                      Left Org
+                                    </span>
+                                  )}
+                                </div>
+                                <p className="text-xs text-muted-foreground mt-0.5">Team Member</p>
+                              </div>
                             </div>
-                            {emp.email && <p className="text-xs text-muted-foreground truncate">{emp.email}</p>}
-                            {emp.phones?.length > 0 && (
-                              <p className="text-xs text-muted-foreground">
-                                {emp.phones[0].type}: {emp.phones[0].number}
-                                {emp.phones.length > 1 && ` +${emp.phones.length - 1} more`}
-                              </p>
-                            )}
+                            <div className="flex items-center gap-1">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                                onClick={() => { setEditingEmployeeIdx(idx); setShowEmployeeForm(true); }}
+                              >
+                                <Pencil className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                                onClick={() => {
+                                  if (confirm('Are you sure you want to delete this employee?')) {
+                                    handleDeleteEmployee(idx);
+                                  }
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
-                          <div className="flex items-center gap-1">
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-foreground"
-                              onClick={() => { setEditingEmployeeIdx(idx); setShowEmployeeForm(true); }}
-                            >
-                              <Pencil className="h-3.5 w-3.5" />
-                            </Button>
-                            <Button
-                              variant="ghost"
-                              size="icon"
-                              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive"
-                              onClick={() => {
-                                if (confirm('Are you sure you want to delete this employee?')) {
-                                  handleDeleteEmployee(idx);
-                                }
-                              }}
-                            >
-                              <Trash2 className="h-3.5 w-3.5" />
-                            </Button>
+
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-4 border-t border-border/50">
+                            {emp.email && (
+                              <div className="flex items-center gap-2.5">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary shrink-0">
+                                  <Mail className="h-3.5 w-3.5 text-muted-foreground" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Email</p>
+                                  <p className="text-xs font-medium text-foreground truncate">{emp.email}</p>
+                                </div>
+                              </div>
+                            )}
+                            {emp.phones?.length > 0 && (
+                              <div className="flex items-center gap-2.5">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary shrink-0">
+                                  <Phone className="h-3.5 w-3.5 text-muted-foreground" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Phone</p>
+                                  <button
+                                    onClick={() => handleCall(emp.phones[0].number)}
+                                    className="text-xs font-medium text-primary hover:underline truncate"
+                                  >
+                                    {emp.phones[0].number}
+                                  </button>
+                                </div>
+                              </div>
+                            )}
+                            {emp.linkedin && (
+                              <div className="flex items-center gap-2.5">
+                                <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-secondary shrink-0">
+                                  <Linkedin className="h-3.5 w-3.5 text-muted-foreground" />
+                                </div>
+                                <div className="min-w-0">
+                                  <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">LinkedIn</p>
+                                  <a
+                                    href={emp.linkedin}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs font-medium text-primary hover:underline truncate block"
+                                  >
+                                    View Profile
+                                  </a>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         </div>
                       ))}

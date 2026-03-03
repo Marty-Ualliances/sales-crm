@@ -1,20 +1,22 @@
 /**
- * Backend pipeline constants — mirrors src/constants/pipeline.ts
+ * Backend pipeline constants — mirrors the default seed pipeline stages.
  * Used in models + routes to keep stage values in sync.
  */
 
 export const PIPELINE_STAGES = [
-    'New Lead',
-    'In Progress',
+    'New',
     'Contacted',
-    'Appointment Set',
-    'Active Account'
+    'Qualified',
+    'Proposal',
+    'Negotiation',
+    'Won',
+    'Lost'
 ] as const;
 
 export type PipelineStageKey = typeof PIPELINE_STAGES[number];
 
 /** Stages that trigger auto-recording flag on calls */
-export const RECORDING_FLAG_STAGES: PipelineStageKey[] = ['Active Account'];
+export const RECORDING_FLAG_STAGES: PipelineStageKey[] = ['Won'];
 
 /** Terminal stages (lead is done) */
-export const TERMINAL_STAGES: PipelineStageKey[] = ['Active Account'];
+export const TERMINAL_STAGES: PipelineStageKey[] = ['Won', 'Lost'];

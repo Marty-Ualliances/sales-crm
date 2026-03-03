@@ -3,7 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowUpDown, Loader2, Search, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useLeads, useAgents } from '@/hooks/useApi';
+import { useLeads, useAgents, useBulkAssign } from '@/hooks/useApi';
+import { toast } from 'sonner';
 import { useDebounce } from '@/hooks/useDebounce';
 import LeadTable from '@/components/common/LeadTable';
 
@@ -88,6 +89,9 @@ export default function LeadsPage() {
   const [sourceFilter, setSourceFilter] = useState('all');
   const [sortBy, setSortBy] = useState<SortOption>('recent-updates');
   const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [assigningTo, setAssigningTo] = useState<string>('');
+  const bulkAssign = useBulkAssign();
 
   const [filterOpen, setFilterOpen] = useState(false);
   const [sortOpen, setSortOpen] = useState(false);
@@ -176,6 +180,34 @@ export default function LeadsPage() {
     setStatusFilter('all');
     setSourceFilter('all');
     setPage(1);
+  };
+
+  const handleSelect = (id: string, selected: boolean) => {
+    if (selected) {
+      setSelectedIds(prev => [...prev, id]);
+    } else {
+      setSelectedIds(prev => prev.filter(i => i !== id));
+    }
+  };
+
+  const handleSelectAll = (selected: boolean) => {
+    if (selected) {
+      setSelectedIds(paginated.map((l: any) => l.id || l._id));
+    } else {
+      setSelectedIds([]);
+    }
+  };
+
+  const handleBulkAssign = async () => {
+    if (!assigningTo || selectedIds.length === 0) return;
+    try {
+      await bulkAssign.mutateAsync({ leadIds: selectedIds, agentName: assigningTo });
+      toast.success(`${selectedIds.length} leads successfully assigned.`);
+      setSelectedIds([]);
+      setAssigningTo('');
+    } catch {
+      toast.error('Failed to assign leads.');
+    }
   };
 
   if (isLoading) {
@@ -341,7 +373,13 @@ export default function LeadsPage() {
         </div>
       </div>
 
-      <LeadTable leads={paginated} startIndex={(safePage - 1) * PAGE_SIZE} />
+      <LeadTable
+        leads={paginated}
+        startIndex={(safePage - 1) * PAGE_SIZE}
+        selectedIds={selectedIds}
+        onSelect={handleSelect}
+        onSelectAll={handleSelectAll}
+      />
 
       {totalPages > 1 && (
         <div className="flex flex-col sm:flex-row items-center justify-between gap-3 border-t border-border pt-4">
@@ -359,6 +397,33 @@ export default function LeadsPage() {
               Next
             </Button>
           </div>
+        </div>
+      )}
+
+      {selectedIds.length > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 bg-card border border-border shadow-elevated rounded-full px-6 py-3 flex items-center gap-4 z-50 animate-in slide-in-from-bottom-5">
+          <span className="text-sm font-semibold text-primary">{selectedIds.length} selected</span>
+          <div className="h-6 w-px bg-border"></div>
+          <select
+            value={assigningTo}
+            onChange={(e) => setAssigningTo(e.target.value)}
+            className="h-8 rounded-md border border-input bg-background px-3 text-sm text-foreground focus:ring-1 focus:ring-primary"
+          >
+            <option value="">Assign to...</option>
+            {agents.filter((a: any) => ['sdr', 'closer'].includes(a.role)).map((agent: any) => (
+              <option key={agent.id} value={agent.id}>{agent.name}</option>
+            ))}
+          </select>
+          <Button
+            size="sm"
+            disabled={!assigningTo || bulkAssign.isPending}
+            onClick={handleBulkAssign}
+          >
+            {bulkAssign.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : 'Assign'}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={() => setSelectedIds([])} className="text-muted-foreground hover:text-foreground">
+            Cancel
+          </Button>
         </div>
       )}
     </div>

@@ -13,7 +13,7 @@ export function useAgents() {
 export function useCreateAgent() {
     const qc = useQueryClient();
     return useMutation({
-        mutationFn: (data: { name: string; email: string; password: string; role: 'admin' | 'sdr' | 'hr' | 'leadgen' }) =>
+        mutationFn: (data: { name: string; email: string; password: string; role: 'admin' | 'manager' | 'sdr' | 'closer' | 'hr' | 'lead_gen' }) =>
             api.agents.create(data),
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ['agents'] });

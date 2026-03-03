@@ -1,7 +1,7 @@
 import Notification from '../models/Notification';
 
 export async function createNotification(data: {
-  type: 'follow-up' | 'overdue' | 'assignment' | 'system';
+  type: 'assignment' | 'stage_change' | 'mention' | 'reminder' | 'system';
   title: string;
   message: string;
   leadId?: string;
@@ -12,10 +12,9 @@ export async function createNotification(data: {
       type: data.type,
       title: data.title,
       message: data.message,
-      timestamp: new Date(),
-      read: false,
-      leadId: data.leadId,
-      userId: data.userId,
+      isRead: false,
+      relatedLead: data.leadId || undefined,
+      userId: data.userId || undefined,
     });
     await notification.save();
     return notification;
@@ -47,7 +46,7 @@ export async function notifyNewLead(leadId: string, leadName: string, assignedAg
 
 export async function notifyFollowUpDue(leadId: string, leadName: string, dueDate: Date, userId?: string) {
   return createNotification({
-    type: 'follow-up',
+    type: 'reminder',
     title: 'Follow-up Due',
     message: `Follow-up for ${leadName} is due on ${dueDate.toISOString().split('T')[0]}`,
     leadId,
@@ -57,7 +56,7 @@ export async function notifyFollowUpDue(leadId: string, leadName: string, dueDat
 
 export async function notifyFollowUpOverdue(leadId: string, leadName: string, userId?: string) {
   return createNotification({
-    type: 'overdue',
+    type: 'reminder',
     title: 'Follow-up Overdue',
     message: `Follow-up for ${leadName} is overdue`,
     leadId,

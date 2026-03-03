@@ -1,32 +1,44 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
+export type NotificationType = 'assignment' | 'stage_change' | 'mention' | 'reminder' | 'system';
+
 export interface INotification extends Document {
-  type: 'follow-up' | 'overdue' | 'assignment' | 'system';
+  userId: mongoose.Types.ObjectId;
   title: string;
   message: string;
-  timestamp: Date;
-  read: boolean;
-  leadId?: string;
-  userId?: string;
+  type: NotificationType;
+  link: string;
+  isRead: boolean;
+  readAt: Date | null;
+  relatedLead: mongoose.Types.ObjectId | null;
+  relatedActivity: mongoose.Types.ObjectId | null;
 }
 
 const NotificationSchema = new Schema<INotification>(
   {
-    type: { type: String, enum: ['follow-up', 'overdue', 'assignment', 'system'], required: true },
+    userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
     title: { type: String, required: true },
     message: { type: String, required: true },
-    timestamp: { type: Date, default: Date.now },
-    read: { type: Boolean, default: false },
-    leadId: { type: String },
-    userId: { type: String },
+    type: {
+      type: String,
+      enum: ['assignment', 'stage_change', 'mention', 'reminder', 'system'],
+      default: 'system',
+    },
+    link: { type: String, default: '' },
+    isRead: { type: Boolean, default: false },
+    readAt: { type: Date, default: null },
+    relatedLead: { type: Schema.Types.ObjectId, ref: 'Lead', default: null },
+    relatedActivity: { type: Schema.Types.ObjectId, ref: 'Activity', default: null },
   },
   { timestamps: true }
 );
 
+NotificationSchema.index({ userId: 1, isRead: 1, createdAt: -1 });
+
 NotificationSchema.set('toJSON', {
-  transform: (_doc, ret: any) => {
-    ret.id = ret._id.toString();
-    if (ret.timestamp) ret.timestamp = ret.timestamp.toISOString().split('T')[0];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  transform: (_doc: any, ret: any) => {
+    ret.id = ret._id?.toString();
     delete ret.__v;
     return ret;
   },

@@ -25,6 +25,27 @@ const sdrNavItems = [
   { icon: StickyNote, label: 'My Notes', path: '/sdr/notes' },
 ];
 
+const ROLE_REDIRECT: Record<string, string> = {
+  admin: '/admin',
+  manager: '/admin',
+  sdr: '/sdr',
+  closer: '/sdr',
+  hr: '/hr',
+  lead_gen: '/leadgen',
+  leadgen: '/leadgen',
+};
+
+const ROLE_COLORS: Record<string, string> = {
+  admin: 'bg-primary text-primary-foreground',
+  manager: 'bg-orange-500 text-white',
+  sdr: 'bg-blue-500 text-white',
+  closer: 'bg-teal-500 text-white',
+  hr: 'bg-emerald-500 text-white',
+  lead_gen: 'bg-amber-500 text-white',
+  leadgen: 'bg-amber-500 text-white',
+};
+
+
 export default function SDRLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '';
   const router = useRouter();
@@ -40,7 +61,7 @@ export default function SDRLayout({ children }: { children: ReactNode }) {
     if (!user) {
       router.replace('/login');
     } else if (!isSDR && !isAdmin) {
-      router.replace(`/${user.role}`);
+      router.replace(ROLE_REDIRECT[user.role] || '/login');
     }
   }, [user, router, isSDR, isAdmin]);
 

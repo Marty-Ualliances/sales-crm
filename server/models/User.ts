@@ -1,18 +1,20 @@
 import mongoose, { Schema, Document } from 'mongoose';
 import bcrypt from 'bcryptjs';
 
+export type UserRole = 'admin' | 'lead_gen' | 'sdr' | 'closer' | 'manager' | 'hr';
+
 export interface IUser extends Document {
   name: string;
   email: string;
   password: string;
   avatar: string;
-  role: 'admin' | 'sdr' | 'hr' | 'leadgen';
-  leadsAssigned: number;
-  callsMade: number;
-  followUpsCompleted: number;
-  followUpsPending: number;
-  conversionRate: number;
-  revenueClosed: number;
+  role: UserRole;
+  team: mongoose.Types.ObjectId;
+  isActive: boolean;
+  phone: string;
+  refreshTokens: string[];
+  failedLoginAttempts: number;
+  lockUntil?: Date;
   /** Token version — incremented on password change to invalidate all existing JWTs */
   tokenVersion: number;
   /** SHA-256 hash of the password-reset token (never store plaintext) */
@@ -26,14 +28,18 @@ const UserSchema = new Schema<IUser>(
     name: { type: String, required: true },
     email: { type: String, required: true, unique: true, lowercase: true },
     password: { type: String, required: true },
-    avatar: { type: String, required: true },
-    role: { type: String, enum: ['admin', 'sdr', 'hr', 'leadgen'], default: 'sdr' },
-    leadsAssigned: { type: Number, default: 0 },
-    callsMade: { type: Number, default: 0 },
-    followUpsCompleted: { type: Number, default: 0 },
-    followUpsPending: { type: Number, default: 0 },
-    conversionRate: { type: Number, default: 0 },
-    revenueClosed: { type: Number, default: 0 },
+    avatar: { type: String, default: '' },
+    role: {
+      type: String,
+      enum: ['admin', 'lead_gen', 'sdr', 'closer', 'manager', 'hr'],
+      default: 'sdr',
+    },
+    team: { type: Schema.Types.ObjectId, ref: 'Team', default: null },
+    isActive: { type: Boolean, default: true },
+    phone: { type: String, default: '' },
+    refreshTokens: [{ type: String }],
+    failedLoginAttempts: { type: Number, default: 0 },
+    lockUntil: { type: Date, default: undefined },
     tokenVersion: { type: Number, default: 0 },
     resetTokenHash: { type: String, default: undefined },
     resetTokenExpiry: { type: Date, default: undefined },
@@ -60,6 +66,9 @@ UserSchema.set('toJSON', {
     delete ret.password;
     delete ret.resetTokenHash;
     delete ret.resetTokenExpiry;
+    delete ret.refreshTokens;
+    delete ret.failedLoginAttempts;
+    delete ret.lockUntil;
     delete ret.__v;
     return ret;
   },

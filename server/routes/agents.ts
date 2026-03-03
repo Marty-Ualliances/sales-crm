@@ -1,86 +1,80 @@
 import { Router, Response } from 'express';
-import User from '../models/User';
-import Call from '../models/Call';
-import Lead from '../models/Lead';
-import { auth, adminOnly, AuthRequest } from '../middleware/auth';
-import { sendWelcomeEmail } from '../services/email';
+import mongoose from 'mongoose';
+import User from '../models/User.js';
+import Activity from '../models/Activity.js';
+import Lead from '../models/Lead.js';
+import { authenticateToken, checkPermission, AuthRequest } from '../middleware/auth.js';
+import { sendWelcomeEmail } from '../services/email.js';
 
 const router = Router();
 
 // GET /api/agents — all authenticated users can see the team roster
-router.get('/', auth, async (req: AuthRequest, res: Response) => {
+router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const userRole = req.user?.role;
-    const canSeeStats = userRole === 'admin' || userRole === 'hr';
+    // For now, allow everyone to see basic stats. A true restriction could be checked via checkPermission('users', 'view_all').
+    const canSeeStats = userRole === 'admin' || userRole === 'hr' || userRole === 'manager' || userRole === 'lead_gen';
 
-    const users = await User.find().sort({ name: 1 });
+    const users = await User.find({ isActive: { $ne: false } }).sort({ name: 1 });
 
     if (canSeeStats) {
-      // Bulk aggregation to avoid N+1 per-agent queries
-      const [callStats, leadAssigned, wonStats, pendingFollowUps, completedCalls] = await Promise.all([
-        Call.aggregate([
-          { $group: { _id: '$agentName', callsMade: { $sum: 1 } } },
+      const [callStats, leadAssigned, wonStats, pendingFollowUps] = await Promise.all([
+        Activity.aggregate([
+          { $match: { type: 'call' } },
+          { $group: { _id: '$userId', callsMade: { $sum: 1 } } }
         ]),
         Lead.aggregate([
-          { $group: { _id: '$assignedAgent', leadsAssigned: { $sum: 1 } } },
+          { $match: { isDeleted: false } },
+          { $group: { _id: '$assignedTo', leadsAssigned: { $sum: 1 } } }
         ]),
         Lead.aggregate([
-          { $match: { status: 'Closed Won' } },
-          { $group: { _id: '$closedBy', leadsWon: { $sum: 1 }, revenueClosed: { $sum: { $ifNull: ['$revenue', 0] } } } },
+          { $match: { status: 'won', isDeleted: false } },
+          { $group: { _id: '$assignedTo', leadsWon: { $sum: 1 }, revenueClosed: { $sum: { $ifNull: ['$dealValue', 0] } } } }
         ]),
-        Lead.aggregate([
-          { $match: { nextFollowUp: { $ne: null }, status: { $nin: ['Closed Won', 'Closed Lost'] } } },
-          { $group: { _id: '$assignedAgent', count: { $sum: 1 } } },
-        ]),
-        Call.aggregate([
-          { $match: { status: 'Completed' } },
-          { $group: { _id: '$agentName', count: { $sum: 1 } } },
-        ]),
+        Activity.aggregate([
+          { $match: { type: 'follow_up', isCompleted: false } },
+          { $group: { _id: '$userId', count: { $sum: 1 } } }
+        ])
       ]);
 
-      // Build lookup maps
-      const callMap = new Map(callStats.map((c: any) => [c._id, c.callsMade]));
-      const assignedMap = new Map(leadAssigned.map((l: any) => [l._id, l.leadsAssigned]));
-      const wonMap = new Map(wonStats.map((w: any) => [w._id, { leadsWon: w.leadsWon, revenueClosed: w.revenueClosed }]));
-      const pendingMap = new Map(pendingFollowUps.map((p: any) => [p._id, p.count]));
-      const completedMap = new Map(completedCalls.map((c: any) => [c._id, c.count]));
+      const callMap = new Map(callStats.map((c: any) => [c._id?.toString(), c.callsMade]));
+      const assignedMap = new Map(leadAssigned.map((l: any) => [l._id?.toString(), l.leadsAssigned]));
+      const wonMap = new Map(wonStats.map((w: any) => [w._id?.toString(), { leadsWon: w.leadsWon, revenueClosed: w.revenueClosed }]));
+      const pendingMap = new Map(pendingFollowUps.map((p: any) => [p._id?.toString(), p.count]));
 
       const agents = users.map((user) => {
         const u = user.toJSON();
-        const callsMade = callMap.get(u.name) || 0;
-        const leadsAssigned = assignedMap.get(u.name) || 0;
-        const won = wonMap.get(u.name) || { leadsWon: 0, revenueClosed: 0 };
+        const strId = user._id.toString();
+        const callsMade = callMap.get(strId) || 0;
+        const leadsAssigned = assignedMap.get(strId) || 0;
+        const won = wonMap.get(strId) || { leadsWon: 0, revenueClosed: 0 };
         const conversionRate = leadsAssigned > 0 ? Math.round((won.leadsWon / leadsAssigned) * 100) : 0;
-        const followUpsPending = pendingMap.get(u.name) || 0;
-        const followUpsCompleted = completedMap.get(u.name) || 0;
+        const followUpsPending = pendingMap.get(strId) || 0;
 
         return {
           ...u,
           callsMade,
           leadsAssigned,
+          leadsWon: won.leadsWon,
           revenueClosed: won.revenueClosed,
           conversionRate,
           followUpsPending,
-          followUpsCompleted,
         };
       });
 
       res.json(agents);
     } else {
-      // SDR & leadgen: basic roster + stats for current user only (5 queries total, not N*5)
+      // Basic roster
       const currentUserDoc = users.find((u) => u._id.toString() === req.user!.id);
-      const currentName = currentUserDoc?.name || '';
 
-      const [callsMade, leadsAssigned, leadsWon, pendingCount, completedCount] = await Promise.all([
-        Call.countDocuments({ agentName: currentName }),
-        Lead.countDocuments({ assignedAgent: currentName }),
-        Lead.countDocuments({ closedBy: currentName, status: 'Closed Won' }),
-        Lead.countDocuments({
-          assignedAgent: currentName,
-          nextFollowUp: { $ne: null },
-          status: { $nin: ['Closed Won', 'Closed Lost'] },
-        }),
-        Call.countDocuments({ agentName: currentName, status: 'Completed' }),
+      const currentId = req.user!.id;
+      const objectId = new mongoose.Types.ObjectId(currentId);
+
+      const [callsMade, leadsAssigned, leadsWon, pendingCount] = await Promise.all([
+        Activity.countDocuments({ userId: objectId, type: 'call' }),
+        Lead.countDocuments({ assignedTo: objectId, isDeleted: false }),
+        Lead.countDocuments({ assignedTo: objectId, status: 'won', isDeleted: false }),
+        Activity.countDocuments({ userId: objectId, type: 'follow_up', isCompleted: false }),
       ]);
 
       const conversionRate = leadsAssigned > 0 ? Math.round((leadsWon / leadsAssigned) * 100) : 0;
@@ -94,8 +88,8 @@ router.get('/', auth, async (req: AuthRequest, res: Response) => {
             ...u,
             callsMade,
             leadsAssigned,
+            leadsWon,
             followUpsPending: pendingCount,
-            followUpsCompleted: completedCount,
             conversionRate,
           };
         }
@@ -110,13 +104,12 @@ router.get('/', auth, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// GET /api/agents/:id — admin/HR see any profile, others see only their own
-router.get('/:id', auth, async (req: AuthRequest, res: Response) => {
+// GET /api/agents/:id
+router.get('/:id', authenticateToken, async (req: AuthRequest, res: Response) => {
   try {
     const userRole = req.user?.role;
-    const canSeeOthers = userRole === 'admin' || userRole === 'hr';
+    const canSeeOthers = userRole === 'admin' || userRole === 'hr' || userRole === 'manager';
 
-    // Non-admin/HR can only view their own profile
     if (!canSeeOthers && req.params.id !== req.user?.id) {
       return res.status(403).json({ error: 'You can only view your own profile' });
     }
@@ -125,22 +118,17 @@ router.get('/:id', auth, async (req: AuthRequest, res: Response) => {
     if (!agent) return res.status(404).json({ error: 'Agent not found' });
 
     const u = agent.toJSON();
+    const objectId = agent._id;
 
-    // Compute real-time KPI metrics in parallel
-    const [callsMade, leadsAssigned, leadsWon, revenueAgg, pendingCount, followUpsCompleted] = await Promise.all([
-      Call.countDocuments({ agentName: u.name }),
-      Lead.countDocuments({ assignedAgent: u.name }),
-      Lead.countDocuments({ closedBy: u.name, status: 'Closed Won' }),
+    const [callsMade, leadsAssigned, leadsWon, revenueAgg, pendingCount] = await Promise.all([
+      Activity.countDocuments({ userId: objectId, type: 'call' }),
+      Lead.countDocuments({ assignedTo: objectId, isDeleted: false }),
+      Lead.countDocuments({ assignedTo: objectId, status: 'won', isDeleted: false }),
       Lead.aggregate([
-        { $match: { closedBy: u.name, status: 'Closed Won' } },
-        { $group: { _id: null, total: { $sum: { $ifNull: ['$revenue', 0] } } } },
+        { $match: { assignedTo: objectId, status: 'won', isDeleted: false } },
+        { $group: { _id: null, total: { $sum: { $ifNull: ['$dealValue', 0] } } } },
       ]),
-      Lead.countDocuments({
-        assignedAgent: u.name,
-        nextFollowUp: { $ne: null },
-        status: { $nin: ['Closed Won', 'Closed Lost'] },
-      }),
-      Call.countDocuments({ agentName: u.name, status: 'Completed' }),
+      Activity.countDocuments({ userId: objectId, type: 'follow_up', isCompleted: false }),
     ]);
 
     const revenueClosed = revenueAgg[0]?.total || 0;
@@ -150,18 +138,18 @@ router.get('/:id', auth, async (req: AuthRequest, res: Response) => {
       ...u,
       callsMade,
       leadsAssigned,
+      leadsWon,
       revenueClosed,
       conversionRate,
-      followUpsPending: pendingCount,
-      followUpsCompleted,
+      followUpsPending: pendingCount
     });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
 });
 
-// POST /api/agents — create new agent (admin only)
-router.post('/', auth, adminOnly, async (req: AuthRequest, res: Response) => {
+// POST /api/agents — create new agent
+router.post('/', authenticateToken, checkPermission('users', 'manage'), async (req: AuthRequest, res: Response) => {
   try {
     const { name, email, password, role } = req.body;
 
@@ -184,7 +172,7 @@ router.post('/', auth, adminOnly, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'Password must be at least 8 characters' });
     }
 
-    const validRoles = ['admin', 'sdr', 'hr', 'leadgen'];
+    const validRoles = ['admin', 'manager', 'sdr', 'closer', 'hr', 'lead_gen'];
     const sanitizedRole = validRoles.includes(role) ? role : 'sdr';
 
     const existingUser = await User.findOne({ email: trimmedEmail });
@@ -192,7 +180,6 @@ router.post('/', auth, adminOnly, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'User with this email already exists' });
     }
 
-    // Pass plain password — User model pre-save hook handles hashing
     const newAgent = await User.create({
       name: trimmedName,
       email: trimmedEmail,
@@ -201,7 +188,6 @@ router.post('/', auth, adminOnly, async (req: AuthRequest, res: Response) => {
       avatar: trimmedName.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2),
     });
 
-    // Send welcome email with credentials (non-blocking)
     sendWelcomeEmail(trimmedEmail, trimmedName, password, sanitizedRole).catch((err) => {
       console.error('Welcome email failed (non-blocking):', err);
     });
@@ -213,15 +199,20 @@ router.post('/', auth, adminOnly, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// PUT /api/agents/:id — admin only
-router.put('/:id', auth, adminOnly, async (req: AuthRequest, res: Response) => {
+// PUT /api/agents/:id
+router.put('/:id', authenticateToken, checkPermission('users', 'manage'), async (req: AuthRequest, res: Response) => {
   try {
-    // Whitelist allowed fields to prevent mass assignment
-    const ALLOWED_AGENT_FIELDS = ['name', 'email', 'role', 'avatar'];
+    const ALLOWED_AGENT_FIELDS = ['name', 'email', 'role', 'phone', 'isActive', 'team'];
     const updates: Record<string, any> = {};
     for (const key of ALLOWED_AGENT_FIELDS) {
       if (req.body[key] !== undefined) updates[key] = req.body[key];
     }
+
+    // Attempt to correctly format standard arrays / names
+    if (updates.name) {
+      updates.avatar = updates.name.split(' ').map((n: string) => n[0]).join('').toUpperCase().slice(0, 2);
+    }
+
     const agent = await User.findByIdAndUpdate(req.params.id, updates, { new: true });
     if (!agent) return res.status(404).json({ error: 'Agent not found' });
     res.json(agent);
@@ -230,12 +221,21 @@ router.put('/:id', auth, adminOnly, async (req: AuthRequest, res: Response) => {
   }
 });
 
-// DELETE /api/agents/:id — admin only
-router.delete('/:id', auth, adminOnly, async (req: AuthRequest, res: Response) => {
+// DELETE /api/agents/:id — soft-delete (deactivate) agent
+router.delete('/:id', authenticateToken, checkPermission('users', 'manage'), async (req: AuthRequest, res: Response) => {
   try {
-    const agent = await User.findByIdAndDelete(req.params.id);
+    // Prevent self-deletion
+    if (req.params.id === req.user!.id) {
+      return res.status(400).json({ error: 'Cannot delete your own account' });
+    }
+
+    const agent = await User.findByIdAndUpdate(
+      req.params.id,
+      { isActive: false },
+      { new: true }
+    );
     if (!agent) return res.status(404).json({ error: 'Agent not found' });
-    res.json({ message: 'Agent deleted successfully' });
+    res.json({ message: 'Agent deactivated successfully' });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }

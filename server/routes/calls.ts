@@ -16,6 +16,22 @@ const CALL_WRITABLE_FIELDS = [
   'status', 'notes', 'hasRecording', 'recordingUrl', 'recordingFlagged',
 ];
 
+// GET /api/calls/recordings — MUST be before /:id to avoid route shadowing
+router.get('/recordings', auth, async (req: AuthRequest, res: Response) => {
+  try {
+    const filter: Record<string, any> = { $or: [{ hasRecording: true }, { recordingFlagged: true }] };
+    if (req.user!.role === 'sdr') {
+      const User = (await import('../models/User')).default;
+      const user = await User.findById(req.user!.id);
+      if (user) filter.agentName = user.name;
+    }
+    const calls = await Call.find(filter).sort({ date: -1 }).limit(500);
+    res.json(calls);
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/calls
 router.get('/', auth, async (req: AuthRequest, res: Response) => {
   try {
@@ -37,7 +53,7 @@ router.get('/', auth, async (req: AuthRequest, res: Response) => {
       ];
     }
 
-    const calls = await Call.find(filter).sort({ date: -1 });
+    const calls = await Call.find(filter).sort({ date: -1 }).limit(500);
     res.json(calls);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -64,6 +80,12 @@ router.post('/', auth, async (req: AuthRequest, res: Response) => {
       if (req.body[key] !== undefined) data[key] = req.body[key];
     }
 
+    if (req.user!.role !== 'admin') {
+      const User = (await import('../models/User')).default;
+      const user = await User.findById(req.user!.id);
+      if (user) data.agentName = user.name;
+    }
+
     // Auto-flag for recording if call >5 minutes
     const durationStr = String(data.duration || '0 min');
     const durationMin = parseInt(durationStr) || 0;
@@ -86,18 +108,20 @@ router.post('/', auth, async (req: AuthRequest, res: Response) => {
     // Auto-update lead stats when a call is logged
     if (data.leadId) {
       const Lead = (await import('../models/Lead')).default;
+      const Activity = (await import('../models/Activity')).default;
       const lead = await Lead.findById(data.leadId);
       if (lead) {
-        lead.callCount = (lead.callCount || 0) + 1;
-        lead.lastActivity = new Date();
-        // Option to add activity log if standard API usage doesn't already
-        lead.activities.push({
-          type: 'call',
-          description: data.notes || 'Call logged',
-          timestamp: new Date(),
-          agent: data.agentName || 'Unknown',
-        });
+        lead.set('updatedAt', new Date());
         await lead.save();
+
+        await Activity.create({
+          leadId: lead._id,
+          userId: req.user!.id,
+          type: 'call',
+          callDuration: durationMin,
+          callOutcome: data.status === 'Completed' ? 'connected' : 'no_answer',
+          description: data.notes || 'Call logged',
+        });
       }
     }
 
@@ -169,22 +193,6 @@ router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
     res.json(call);
   } catch (err) {
     console.error('Update call error:', err);
-    res.status(500).json({ error: 'Server error' });
-  }
-});
-
-// GET /api/calls/recordings — list only calls with recordings or flagged
-router.get('/recordings', auth, async (req: AuthRequest, res: Response) => {
-  try {
-    const filter: Record<string, any> = { $or: [{ hasRecording: true }, { recordingFlagged: true }] };
-    if (req.user!.role === 'sdr') {
-      const User = (await import('../models/User')).default;
-      const user = await User.findById(req.user!.id);
-      if (user) filter.agentName = user.name;
-    }
-    const calls = await Call.find(filter).sort({ date: -1 });
-    res.json(calls);
-  } catch (err) {
     res.status(500).json({ error: 'Server error' });
   }
 });

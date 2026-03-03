@@ -18,16 +18,19 @@ router.get('/', auth, async (req: AuthRequest, res: Response) => {
         const todayStr = getTodayStr();
 
         const filter: any = {};
-        if (user.role === 'sdr' || user.role === 'leadgen') {
+        if (user.role === 'sdr' || user.role === 'lead_gen') {
             filter.agentName = user.name;
         }
 
-        // Aggregate total emails sent
-        const allRecords = await Outreach.find(filter);
-        const totalEmails = allRecords.reduce((sum, r) => sum + r.emailsSent, 0);
+        // Use aggregation instead of loading all records into memory
+        const [totals] = await Outreach.aggregate([
+            { $match: filter },
+            { $group: { _id: null, totalEmails: { $sum: '$emailsSent' } } },
+        ]);
+        const totalEmails = totals?.totalEmails || 0;
 
         // Get today's emails sent
-        const todayRecord = allRecords.find(r => r.date === todayStr);
+        const todayRecord = await Outreach.findOne({ ...filter, date: todayStr });
         const todayEmails = todayRecord ? todayRecord.emailsSent : 0;
 
         res.json({ totalEmails, todayEmails, todayDate: todayStr });
@@ -43,8 +46,8 @@ router.post('/', auth, async (req: AuthRequest, res: Response) => {
         const user = req.user!;
         const { count } = req.body;
 
-        if (typeof count !== 'number' || count < 0) {
-            return res.status(400).json({ error: 'Invalid count' });
+        if (typeof count !== 'number' || count < 0 || count > 10000) {
+            return res.status(400).json({ error: 'Invalid count (must be 0–10,000)' });
         }
 
         const todayStr = getTodayStr();

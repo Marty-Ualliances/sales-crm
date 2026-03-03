@@ -4,6 +4,8 @@ import mongoose from 'mongoose';
 import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
+import mongoSanitize from 'express-mongo-sanitize';
+import sanitizeHtml from 'sanitize-html';
 import cookieParser from 'cookie-parser';
 import dotenv from 'dotenv';
 import next from 'next';
@@ -18,7 +20,12 @@ import hrRoutes from './routes/hr';
 import noteRoutes from './routes/notes';
 import meetingRoutes from './routes/meetings';
 import outreachRoutes from './routes/outreach';
+import activityRoutes from './routes/activities';
+import pipelineRoutes from './routes/pipeline';
 import { initIO } from './socket';
+
+process.on('unhandledRejection', (err) => { console.error('Unhandled rejection:', err); });
+process.on('uncaughtException', (err) => { console.error('Uncaught exception:', err); process.exit(1); });
 
 dotenv.config({ override: false });
 
@@ -44,10 +51,12 @@ initIO(httpServer);
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' },
   crossOriginOpenerPolicy: false,
+  hsts: { maxAge: 31536000, includeSubDomains: true },
+  frameguard: { action: 'deny' },
   contentSecurityPolicy: {
     directives: {
       defaultSrc: ["'self'"],
-      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],  // Next.js requires these
+      scriptSrc: ["'self'", "'unsafe-inline'", "'unsafe-eval'"],
       styleSrc: ["'self'", "'unsafe-inline'"],
       imgSrc: ["'self'", "data:", "https:"],
       connectSrc: ["'self'", "wss:", "ws:"],
@@ -59,6 +68,12 @@ app.use(helmet({
     },
   },
 }));
+
+app.use((_req, res, next) => {
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  res.setHeader('X-XSS-Protection', '0');
+  next();
+});
 
 const allowedOriginsString = env.ALLOWED_ORIGINS || '';
 const parsedOrigins = allowedOriginsString
@@ -96,36 +111,33 @@ app.use(cookieParser());
 app.use(express.json({ limit: '1mb' }));
 app.use(express.urlencoded({ extended: false, limit: '1mb' }));
 
-// Prevent NoSQL injection
-function sanitize(obj: any): any {
-  if (obj === null || typeof obj !== 'object') return obj;
-  if (Array.isArray(obj)) return obj.map(sanitize);
-  const clean: Record<string, any> = {};
-  for (const key of Object.keys(obj)) {
-    if (key.startsWith('$') || key.includes('.')) continue;
-    clean[key] = sanitize(obj[key]);
+function deepSanitizeHtml(obj: any): any {
+  if (typeof obj === 'string') {
+    return sanitizeHtml(obj, {
+      allowedTags: [], // Strip all HTML tags
+      allowedAttributes: {}
+    });
   }
-  return clean;
+  if (Array.isArray(obj)) return obj.map(deepSanitizeHtml);
+  if (obj !== null && typeof obj === 'object') {
+    const clean: Record<string, any> = {};
+    for (const key of Object.keys(obj)) {
+      clean[key] = deepSanitizeHtml(obj[key]);
+    }
+    return clean;
+  }
+  return obj;
 }
+
 app.use((req: Request, _res: Response, nextMiddleware: NextFunction) => {
-  if (req.body && typeof req.body === 'object') req.body = sanitize(req.body);
-  if (req.query && typeof req.query === 'object') {
-    const sanitizedQuery = sanitize(req.query as Record<string, unknown>);
-    const queryObj = req.query as Record<string, unknown>;
-    for (const key of Object.keys(queryObj)) {
-      delete queryObj[key];
-    }
-    Object.assign(queryObj, sanitizedQuery);
-  }
-  if (req.params && typeof req.params === 'object') {
-    for (const key of Object.keys(req.params)) {
-      if (typeof req.params[key] === 'string' && req.params[key].startsWith('$')) {
-        req.params[key] = '';
-      }
-    }
-  }
+  if (req.body) req.body = deepSanitizeHtml(req.body);
+  if (req.query) req.query = deepSanitizeHtml(req.query as Record<string, unknown>);
+  if (req.params) req.params = deepSanitizeHtml(req.params);
   nextMiddleware();
 });
+
+// Prevent NoSQL injection
+app.use(mongoSanitize());
 
 // General API: 100 req / 15 min per IP
 const apiLimiter = rateLimit({
@@ -169,6 +181,8 @@ import { auditLogMiddleware } from './middleware/auditLog';
 app.use('/api/auth/impersonate', auditLogMiddleware);
 app.use('/api/auth', authRoutes);
 app.use('/api/leads', auditLogMiddleware, leadRoutes);
+app.use('/api/activities', activityRoutes);
+app.use('/api/pipeline', pipelineRoutes);
 app.use('/api/calls', auditLogMiddleware, callRoutes);
 app.use('/api/agents', auditLogMiddleware, agentRoutes);
 app.use('/api/meetings', auditLogMiddleware, meetingRoutes);
@@ -219,6 +233,43 @@ app.use((err: Error, _req: Request, res: Response, _next: NextFunction) => {
 
 // ── Auto-seed admin user if database is empty ──
 import User from './models/User';
+import PipelineStage from './models/PipelineStage';
+
+const DEFAULT_PIPELINE_STAGES = [
+  { name: 'New', order: 1, color: '#6B7280', probability: 5, isDefault: true, description: 'Freshly added lead' },
+  { name: 'Contacted', order: 2, color: '#3B82F6', probability: 15, description: 'Initial contact made' },
+  { name: 'Qualified', order: 3, color: '#8B5CF6', probability: 30, description: 'Lead is qualified' },
+  { name: 'Proposal', order: 4, color: '#F59E0B', probability: 50, description: 'Proposal sent' },
+  { name: 'Negotiation', order: 5, color: '#EF4444', probability: 70, description: 'In negotiations' },
+  { name: 'Won', order: 6, color: '#10B981', probability: 100, description: 'Deal closed — won' },
+  { name: 'Lost', order: 7, color: '#DC2626', probability: 0, description: 'Deal closed — lost' },
+];
+
+async function autoSeedPipelineStages() {
+  try {
+    const stageCount = await PipelineStage.countDocuments();
+    if (stageCount > 0) {
+      console.log(`[SEED] ${stageCount} pipeline stages already exist — skipping.`);
+    } else {
+      await PipelineStage.insertMany(DEFAULT_PIPELINE_STAGES);
+      console.log(`[SEED] ✅ Created ${DEFAULT_PIPELINE_STAGES.length} default pipeline stages.`);
+    }
+
+    // Assign default stage to any leads missing pipelineStage
+    const defaultStage = await PipelineStage.findOne({ isDefault: true, isActive: true }).sort({ order: 1 });
+    if (defaultStage) {
+      const result = await (await import('./models/Lead.js')).default.updateMany(
+        { $or: [{ pipelineStage: null }, { pipelineStage: { $exists: false } }], isDeleted: { $ne: true } },
+        { $set: { pipelineStage: defaultStage._id } }
+      );
+      if (result.modifiedCount > 0) {
+        console.log(`[SEED] ✅ Assigned default stage "${defaultStage.name}" to ${result.modifiedCount} lead(s) missing pipelineStage.`);
+      }
+    }
+  } catch (err) {
+    console.error('[SEED] ❌ Pipeline stage seed failed:', err);
+  }
+}
 
 async function autoSeedAdmin() {
   try {
@@ -233,16 +284,17 @@ async function autoSeedAdmin() {
     const teamPassword = process.env.SEED_TEAM_PASSWORD || 'Team2026!';
 
     await User.create([
-      { name: 'Chiren', email: 'chiren@ualliances.com', password: adminPassword, avatar: 'CH', role: 'admin', leadsAssigned: 0, callsMade: 0, followUpsCompleted: 0, followUpsPending: 0, conversionRate: 0, revenueClosed: 0 },
-      { name: 'Rajesh Patel', email: 'rajesh@ualliances.com', password: teamPassword, avatar: 'RP', role: 'sdr', leadsAssigned: 0, callsMade: 0, followUpsCompleted: 0, followUpsPending: 0, conversionRate: 0, revenueClosed: 0 },
-      { name: 'Priya Sharma', email: 'priya@ualliances.com', password: teamPassword, avatar: 'PS', role: 'sdr', leadsAssigned: 0, callsMade: 0, followUpsCompleted: 0, followUpsPending: 0, conversionRate: 0, revenueClosed: 0 },
-      { name: 'Amit Desai', email: 'amit@ualliances.com', password: teamPassword, avatar: 'AD', role: 'sdr', leadsAssigned: 0, callsMade: 0, followUpsCompleted: 0, followUpsPending: 0, conversionRate: 0, revenueClosed: 0 },
-      { name: 'Deepa Joshi', email: 'deepa@ualliances.com', password: teamPassword, avatar: 'DJ', role: 'hr', leadsAssigned: 0, callsMade: 0, followUpsCompleted: 0, followUpsPending: 0, conversionRate: 0, revenueClosed: 0 },
-      { name: 'Karan Shah', email: 'karan@ualliances.com', password: teamPassword, avatar: 'KS', role: 'leadgen', leadsAssigned: 0, callsMade: 0, followUpsCompleted: 0, followUpsPending: 0, conversionRate: 0, revenueClosed: 0 },
+      { name: 'Chiren', email: 'chiren@ualliances.com', password: adminPassword, avatar: 'CH', role: 'admin' },
+      { name: 'Rajesh Patel', email: 'rajesh@ualliances.com', password: teamPassword, avatar: 'RP', role: 'sdr' },
+      { name: 'Priya Sharma', email: 'priya@ualliances.com', password: teamPassword, avatar: 'PS', role: 'sdr' },
+      { name: 'Amit Desai', email: 'amit@ualliances.com', password: teamPassword, avatar: 'AD', role: 'closer' },
+      { name: 'Deepa Joshi', email: 'deepa@ualliances.com', password: teamPassword, avatar: 'DJ', role: 'hr' },
+      { name: 'Karan Shah', email: 'karan@ualliances.com', password: teamPassword, avatar: 'KS', role: 'lead_gen' },
+      { name: 'Sanjay Gupta', email: 'sanjay@ualliances.com', password: teamPassword, avatar: 'SG', role: 'manager' },
     ]);
-    console.log('[SEED] ✅ Created 6 default users (admin + team)');
+    console.log('[SEED] ✅ Created 7 default users (admin + team)');
     console.log('[SEED]   Admin: chiren@ualliances.com');
-    console.log('[SEED]   Team:  rajesh/priya/amit/deepa/karan @ualliances.com');
+    console.log('[SEED]   Team:  rajesh/priya (sdr), amit (closer), deepa (hr), karan (lead_gen), sanjay (manager)');
   } catch (err) {
     console.error('[SEED] ❌ Auto-seed failed:', err);
   }
@@ -254,11 +306,17 @@ httpServer.listen(Number(PORT), '0.0.0.0', () => {
 
   // Connect to DB asynchronously after we are listening so Railway doesn't timeout
   mongoose
-    .connect(MONGODB_URI, { serverSelectionTimeoutMS: 5000 })
+    .connect(MONGODB_URI, {
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000
+    })
     .then(async () => {
+      mongoose.set('maxTimeMS', 5000); // Set global default query timeout
       console.log('✅ Connected to MongoDB');
       // Auto-create users if DB is empty (first deploy / fresh database)
       await autoSeedAdmin();
+      // Auto-create pipeline stages if none exist
+      await autoSeedPipelineStages();
     })
     .catch((err) => {
       console.error('❌ MONGODB CONNECTION ERROR:', err.message);

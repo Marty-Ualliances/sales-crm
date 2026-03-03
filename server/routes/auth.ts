@@ -92,11 +92,20 @@ function clearAdminBackupCookie(res: Response) {
   res.clearCookie('insurelead_admin_backup', { ...base, path: backupPath });
 }
 
-function issueTokenPair(payload: { id: string; role: string; email: string; name?: string; tokenVersion?: number; impersonatedBy?: string }) {
+function issueTokenPair(payload: { id: string; role: string; email: string; name?: string; team?: string; tokenVersion?: number; impersonatedBy?: string }) {
   const accessToken = jwt.sign(payload, getJwtSecret(), { expiresIn: '15m' });
   const refreshToken = jwt.sign({ id: payload.id, tokenVersion: payload.tokenVersion ?? 0 }, getRefreshSecret(), { expiresIn: '7d' });
   return { accessToken, refreshToken };
 }
+
+function validatePasswordFormat(password: string): boolean {
+  if (password.length < 8) return false;
+  if (!/[A-Z]/.test(password)) return false;
+  if (!/[a-z]/.test(password)) return false;
+  if (!/[0-9]/.test(password)) return false;
+  return true;
+}
+
 
 // ─── POST /api/auth/login ────────────────────────────────────────────────────
 router.post('/login', async (req: Request, res: Response) => {
@@ -113,11 +122,24 @@ router.post('/login', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
+    if (user.lockUntil && user.lockUntil > new Date()) {
+      const waitMinutes = Math.ceil((user.lockUntil.getTime() - Date.now()) / 60000);
+      return res.status(401).json({ error: `Account locked. Try again in ${waitMinutes} minutes.` });
+    }
+
     const isMatch = await user.comparePassword(password);
     if (!isMatch) {
+      user.failedLoginAttempts += 1;
+      if (user.failedLoginAttempts >= 10) {
+        user.lockUntil = new Date(Date.now() + 15 * 60 * 1000);
+      }
+      await user.save();
       console.warn(`[LOGIN] Password mismatch for email: ${trimmedEmail}`);
       return res.status(401).json({ error: 'Invalid credentials' });
     }
+
+    user.failedLoginAttempts = 0;
+    user.lockUntil = undefined;
     console.log(`[LOGIN] Successful login for: ${trimmedEmail} (role: ${user.role})`);
 
     const { accessToken, refreshToken } = issueTokenPair({
@@ -125,8 +147,13 @@ router.post('/login', async (req: Request, res: Response) => {
       role: user.role,
       email: user.email,
       name: user.name,
+      team: user.team?.toString(),
       tokenVersion: user.tokenVersion || 0,
     });
+
+    const refreshHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    user.refreshTokens.push(refreshHash);
+    await user.save();
 
     setAuthCookies(res, accessToken, refreshToken);
     res.json({ user: user.toJSON() });
@@ -137,9 +164,36 @@ router.post('/login', async (req: Request, res: Response) => {
 });
 
 // ─── POST /api/auth/logout ───────────────────────────────────────────────────
-router.post('/logout', (_req: Request, res: Response) => {
+router.post('/logout', async (req: Request, res: Response) => {
+  const refreshToken = (req as any).cookies?.insurelead_refresh;
+  if (refreshToken) {
+    try {
+      const payload = jwt.verify(refreshToken, getRefreshSecret()) as { id: string };
+      const user = await User.findById(payload.id);
+      if (user) {
+        const refreshHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+        user.refreshTokens = user.refreshTokens.filter(t => t !== refreshHash);
+        await user.save();
+      }
+    } catch (e) { /* ignore expired token on logout */ }
+  }
   clearAuthCookies(res);
   res.json({ message: 'Logged out' });
+});
+
+// ─── POST /api/auth/logout-all ───────────────────────────────────────────────
+router.post('/logout-all', auth, async (req: AuthRequest, res: Response) => {
+  try {
+    const user = await User.findById(req.user!.id);
+    if (user) {
+      user.refreshTokens = [];
+      await user.save();
+    }
+    clearAuthCookies(res);
+    res.json({ message: 'Logged out from all devices' });
+  } catch (err) {
+    res.status(500).json({ error: 'Server error' });
+  }
 });
 
 // ─── POST /api/auth/refresh ──────────────────────────────────────────────────
@@ -164,6 +218,16 @@ router.post('/refresh', async (req: Request, res: Response) => {
       return res.status(401).json({ error: 'User not found' });
     }
 
+    const refreshHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    const tokenIndex = user.refreshTokens.indexOf(refreshHash);
+    if (tokenIndex === -1) {
+      user.refreshTokens = [];
+      await user.save();
+      clearAuthCookies(res);
+      return res.status(401).json({ error: 'Refresh token reuse detected' });
+    }
+    user.refreshTokens.splice(tokenIndex, 1);
+
     // Validate tokenVersion — reject if password was changed after token was issued
     const currentVersion = user.tokenVersion || 0;
     if (payload.tokenVersion !== undefined && payload.tokenVersion !== currentVersion) {
@@ -176,8 +240,13 @@ router.post('/refresh', async (req: Request, res: Response) => {
       role: user.role,
       email: user.email,
       name: user.name,
+      team: user.team?.toString(),
       tokenVersion: currentVersion,
     });
+
+    const newRefreshHash = crypto.createHash('sha256').update(newRefresh).digest('hex');
+    user.refreshTokens.push(newRefreshHash);
+    await user.save();
 
     setAuthCookies(res, accessToken, newRefresh);
     res.json({ user: user.toJSON() });
@@ -191,7 +260,9 @@ router.post('/refresh', async (req: Request, res: Response) => {
 router.get('/me', auth, async (req: AuthRequest, res: Response) => {
   try {
     // Explicit projection to avoid leaking sensitive fields even if toJSON hook changes
-    const user = await User.findById(req.user!.id).select('-password -resetTokenHash -resetTokenExpiry -__v');
+    const user = await User.findById(req.user!.id)
+      .select('-password -resetTokenHash -resetTokenExpiry -__v')
+      .populate('team', 'name description');
     if (!user) return res.status(404).json({ error: 'User not found' });
     res.json(user.toJSON());
   } catch (err) {
@@ -296,6 +367,16 @@ router.post('/exit-impersonation', async (req: Request, res: Response) => {
       tokenVersion: admin.tokenVersion || 0,
     });
 
+    // Store the refresh token hash so the next /refresh call succeeds
+    const crypto = await import('crypto');
+    const refreshHash = crypto.createHash('sha256').update(refreshToken).digest('hex');
+    admin.refreshTokens.push(refreshHash);
+    // Cap stored tokens to prevent unbounded array growth
+    if (admin.refreshTokens.length > 10) {
+      admin.refreshTokens = admin.refreshTokens.slice(-10);
+    }
+    await admin.save();
+
     setAuthCookies(res, accessToken, refreshToken);
     clearAdminBackupCookie(res);
     res.json({ user: admin.toJSON() });
@@ -317,7 +398,7 @@ router.post('/register', auth, async (req: AuthRequest, res: Response) => {
       return res.status(400).json({ error: 'name, email, and role are required' });
     }
 
-    const VALID_ROLES = ['admin', 'sdr', 'hr', 'leadgen'];
+    const VALID_ROLES = ['admin', 'lead_gen', 'sdr', 'closer', 'manager', 'hr'];
     if (!VALID_ROLES.includes(role)) {
       return res.status(400).json({ error: `role must be one of: ${VALID_ROLES.join(', ')}` });
     }
@@ -394,8 +475,8 @@ router.post('/reset-password', async (req: Request, res: Response) => {
       return res.status(400).json({ error: 'Token and new password are required' });
     }
 
-    if (String(password).length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters' });
+    if (!validatePasswordFormat(String(password))) {
+      return res.status(400).json({ error: 'Password must be at least 8 characters and include uppercase, lowercase, and a number' });
     }
 
     const tokenHash = crypto.createHash('sha256').update(String(token)).digest('hex');
@@ -430,8 +511,8 @@ router.post('/change-password', auth, async (req: AuthRequest, res: Response) =>
       return res.status(400).json({ error: 'Current password and new password are required' });
     }
 
-    if (String(newPassword).length < 8) {
-      return res.status(400).json({ error: 'New password must be at least 8 characters' });
+    if (!validatePasswordFormat(String(newPassword))) {
+      return res.status(400).json({ error: 'New password must be at least 8 characters and include uppercase, lowercase, and a number' });
     }
 
     const user = await User.findById(req.user!.id);

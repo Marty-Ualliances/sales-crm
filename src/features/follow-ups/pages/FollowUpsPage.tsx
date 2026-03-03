@@ -67,7 +67,7 @@ export default function FollowUpsPage() {
           const isOverdue = lead.nextFollowUp! < today;
           const isToday = lead.nextFollowUp === today;
           return (
-            <div key={lead.id} className={`rounded-xl border bg-card p-4 shadow-card flex items-center justify-between gap-4 ${isOverdue ? 'border-destructive/30 bg-destructive/5' : 'border-border'}`}>
+            <div key={lead.id || lead._id} className={`rounded-xl border bg-card p-4 shadow-card flex items-center justify-between gap-4 ${isOverdue ? 'border-destructive/30 bg-destructive/5' : 'border-border'}`}>
               <div className="flex items-center gap-4 min-w-0">
                 <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-sm font-medium ${isOverdue ? 'bg-destructive/10 text-destructive' : 'bg-accent text-accent-foreground'}`}>
                   {isOverdue ? <AlertTriangle className="h-4 w-4" /> : <Clock className="h-4 w-4" />}
@@ -85,7 +85,7 @@ export default function FollowUpsPage() {
                   <p className="text-xs text-muted-foreground">{lead.nextFollowUp}</p>
                 </div>
                 <Button size="sm" variant={isOverdue ? 'destructive' : 'default'}
-                  onClick={() => handleComplete(lead.id, lead.name)}
+                  onClick={() => handleComplete(lead.id || lead._id!, lead.name)}
                   disabled={completeFollowUp.isPending}>
                   <CheckCircle className="h-3.5 w-3.5 mr-1" />
                   {completeFollowUp.isPending ? 'Completing...' : 'Complete'}

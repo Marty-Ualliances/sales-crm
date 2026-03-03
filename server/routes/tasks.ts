@@ -10,7 +10,13 @@ router.get('/', auth, async (req: AuthRequest, res: Response) => {
     const { assignedTo, status, from, to, priority } = req.query;
     const filter: Record<string, any> = {};
 
-    if (assignedTo) filter.assignedTo = assignedTo;
+    // Role-based visibility: SDRs/closers only see their own tasks
+    const role = req.user!.role;
+    if (role === 'sdr' || role === 'closer') {
+      filter.assignedTo = req.user!.name;
+    } else if (assignedTo) {
+      filter.assignedTo = assignedTo;
+    }
     if (status) filter.status = status;
     if (priority) filter.priority = priority;
     if (from || to) {
@@ -19,7 +25,7 @@ router.get('/', auth, async (req: AuthRequest, res: Response) => {
       if (to) filter.dueDate.$lte = new Date(to as string);
     }
 
-    const tasks = await Task.find(filter).sort({ dueDate: 1, priority: -1 });
+    const tasks = await Task.find(filter).sort({ dueDate: 1, priority: -1 }).limit(500);
     res.json(tasks);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -93,8 +99,14 @@ router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
       updates.completedAt = null;
     }
 
+    const existingTask = await Task.findById(req.params.id);
+    if (!existingTask) return res.status(404).json({ error: 'Task not found' });
+
+    if (req.user!.role !== 'admin' && req.user!.role !== 'manager' && existingTask.assignedTo !== req.user!.name) {
+      return res.status(403).json({ error: 'Not authorized to edit this task' });
+    }
+
     const task = await Task.findByIdAndUpdate(req.params.id, updates, { new: true });
-    if (!task) return res.status(404).json({ error: 'Task not found' });
     res.json(task);
   } catch (err) {
     res.status(500).json({ error: 'Server error' });
@@ -104,8 +116,14 @@ router.put('/:id', auth, async (req: AuthRequest, res: Response) => {
 // DELETE /api/tasks/:id
 router.delete('/:id', auth, async (req: AuthRequest, res: Response) => {
   try {
-    const task = await Task.findByIdAndDelete(req.params.id);
-    if (!task) return res.status(404).json({ error: 'Task not found' });
+    const existingTask = await Task.findById(req.params.id);
+    if (!existingTask) return res.status(404).json({ error: 'Task not found' });
+
+    if (req.user!.role !== 'admin' && req.user!.role !== 'manager' && existingTask.assignedTo !== req.user!.name) {
+      return res.status(403).json({ error: 'Not authorized to delete this task' });
+    }
+
+    await Task.findByIdAndDelete(req.params.id);
     res.json({ message: 'Task deleted' });
   } catch (err) {
     res.status(500).json({ error: 'Server error' });

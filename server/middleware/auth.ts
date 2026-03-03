@@ -1,8 +1,18 @@
 import { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import { env } from '../config/env.js';
+import { PERMISSIONS } from '../config/permissions.js';
+import type { UserRole } from '../models/User.js';
 
 export interface AuthRequest extends Request {
-  user?: { id: string; role: string; email: string; name: string; impersonatedBy?: string };
+  user?: {
+    id: string;
+    role: UserRole;
+    email: string;
+    name: string;
+    team?: string;
+    impersonatedBy?: string;
+  };
 }
 
 function extractToken(req: Request): string | null {
@@ -20,9 +30,11 @@ function extractToken(req: Request): string | null {
   return null;
 }
 
-import { env } from '../config/env';
-
-export const auth = async (req: AuthRequest, res: Response, next: NextFunction) => {
+/**
+ * Authenticate JWT token from cookie or Authorization header.
+ * Attaches decoded user payload to req.user.
+ */
+export const authenticateToken = async (req: AuthRequest, res: Response, next: NextFunction) => {
   const secret = env.JWT_SECRET;
   if (!secret) {
     return res.status(500).json({ error: 'JWT_SECRET missing' });
@@ -35,9 +47,10 @@ export const auth = async (req: AuthRequest, res: Response, next: NextFunction) 
   try {
     const decoded = jwt.verify(token, secret) as {
       id: string;
-      role: string;
+      role: UserRole;
       email: string;
       name: string;
+      team?: string;
       impersonatedBy?: string;
     };
     req.user = decoded;
@@ -45,8 +58,53 @@ export const auth = async (req: AuthRequest, res: Response, next: NextFunction) 
   } catch {
     res.status(401).json({ error: 'Token is not valid' });
   }
+};
+
+// Legacy alias — keep for backward compatibility
+export const auth = authenticateToken;
+
+/**
+ * Role-based authorization middleware factory.
+ * Usage: authorize('admin', 'manager', 'hr')
+ */
+export function authorize(...roles: UserRole[]) {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+    if (!roles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    next();
+  };
 }
 
+/**
+ * Permission-based authorization middleware factory.
+ * Uses the permission map from config/permissions.ts
+ * Usage: checkPermission('leads', 'upload')
+ */
+export function checkPermission(resource: string, action: string) {
+  const permKey = `${resource}.${action}`;
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.user) {
+      return res.status(401).json({ error: 'Authentication required' });
+    }
+
+    const allowedRoles = PERMISSIONS[permKey];
+    if (!allowedRoles) {
+      // If no permission defined, deny by default
+      return res.status(403).json({ error: `No permission rule for ${permKey}` });
+    }
+
+    if (!allowedRoles.includes(req.user.role)) {
+      return res.status(403).json({ error: 'Insufficient permissions' });
+    }
+    next();
+  };
+}
+
+// Legacy convenience middlewares — keep for backward compatibility
 export function adminOnly(req: AuthRequest, res: Response, next: NextFunction) {
   if (req.user?.role !== 'admin') {
     return res.status(403).json({ error: 'Admin access required' });
@@ -55,7 +113,7 @@ export function adminOnly(req: AuthRequest, res: Response, next: NextFunction) {
 }
 
 export function leadgenOrAdmin(req: AuthRequest, res: Response, next: NextFunction) {
-  if (req.user?.role !== 'admin' && req.user?.role !== 'leadgen') {
+  if (req.user?.role !== 'admin' && req.user?.role !== 'lead_gen') {
     return res.status(403).json({ error: 'Lead Gen or Admin access required' });
   }
   next();

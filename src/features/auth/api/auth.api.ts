@@ -5,7 +5,7 @@ export interface AuthUser {
     name: string;
     email: string;
     avatar: string;
-    role: 'admin' | 'sdr' | 'hr' | 'leadgen';
+    role: 'admin' | 'manager' | 'sdr' | 'closer' | 'hr' | 'lead_gen' | 'leadgen';
 }
 
 /** Shape returned by login / impersonate — no token in body (server sets httpOnly cookie) */

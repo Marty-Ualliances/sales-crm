@@ -14,9 +14,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 
 const ROLE_CONFIG: Record<string, { label: string; color: string }> = {
   admin: { label: 'Admin', color: 'bg-primary text-primary-foreground' },
+  manager: { label: 'Manager', color: 'bg-orange-100 text-orange-700 dark:bg-orange-900 dark:text-orange-300' },
   sdr: { label: 'SDR Agent', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300' },
+  closer: { label: 'Closer', color: 'bg-teal-100 text-teal-700 dark:bg-teal-900 dark:text-teal-300' },
   hr: { label: 'HR', color: 'bg-purple-100 text-purple-700 dark:bg-purple-900 dark:text-purple-300' },
-  leadgen: { label: 'Lead Gen', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' },
+  lead_gen: { label: 'Lead Gen', color: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900 dark:text-emerald-300' },
 };
 
 export default function TeamManagement() {
@@ -49,7 +51,7 @@ export default function TeamManagement() {
         name: newAgent.name,
         email: newAgent.email,
         password: newAgent.password,
-        role: newAgent.role as 'admin' | 'sdr' | 'hr' | 'leadgen',
+        role: newAgent.role as 'admin' | 'manager' | 'sdr' | 'closer' | 'hr' | 'lead_gen',
       });
       toast.success(`${newAgent.name} added — credentials sent via email`);
       setOpenDialog(false);
@@ -141,7 +143,9 @@ export default function TeamManagement() {
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="sdr">SDR Agent</SelectItem>
-                      <SelectItem value="leadgen">Lead Gen</SelectItem>
+                      <SelectItem value="closer">Closer</SelectItem>
+                      <SelectItem value="lead_gen">Lead Gen</SelectItem>
+                      <SelectItem value="manager">Manager</SelectItem>
                       <SelectItem value="hr">HR</SelectItem>
                       <SelectItem value="admin">Admin</SelectItem>
                     </SelectContent>
@@ -276,7 +280,7 @@ export default function TeamManagement() {
 
                   {/* Assigned Leads Preview */}
                   {(() => {
-                    const agentLeads = leads.filter((l: any) => l.assignedAgent === selectedAgent.name);
+                    const agentLeads = leads.filter((l: any) => l.assignedTo?.id === selectedAgent.id || l.assignedTo?._id === selectedAgent.id);
                     if (agentLeads.length === 0) return null;
                     return (
                       <div className="pt-2">

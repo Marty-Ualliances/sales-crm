@@ -25,7 +25,21 @@ const formatCompanySize = (count?: number | null) => {
   return count.toLocaleString();
 };
 
-export default function LeadTable({ leads, compact = false, startIndex = 0 }: { leads: Lead[]; compact?: boolean; startIndex?: number }) {
+export default function LeadTable({
+  leads,
+  compact = false,
+  startIndex = 0,
+  selectedIds = [],
+  onSelect,
+  onSelectAll
+}: {
+  leads: Lead[];
+  compact?: boolean;
+  startIndex?: number;
+  selectedIds?: string[];
+  onSelect?: (id: string, selected: boolean) => void;
+  onSelectAll?: (selected: boolean) => void;
+}) {
   const today = new Date().toISOString().split('T')[0];
   const router = useRouter();
   const pathname = usePathname() ?? '';
@@ -74,6 +88,16 @@ export default function LeadTable({ leads, compact = false, startIndex = 0 }: { 
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-border bg-gradient-to-r from-secondary/60 to-secondary/30">
+              {onSelect && (
+                <th className="text-center px-3 py-3 w-10">
+                  <input
+                    type="checkbox"
+                    checked={leads.length > 0 && selectedIds.length === leads.length}
+                    onChange={(e) => onSelectAll?.(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                  />
+                </th>
+              )}
               <th className="text-center px-3 py-3 font-medium text-muted-foreground w-12">#</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Agency Name</th>
               <th className="text-left px-4 py-3 font-medium text-muted-foreground">Name</th>
@@ -90,22 +114,33 @@ export default function LeadTable({ leads, compact = false, startIndex = 0 }: { 
             {leads.map((lead, index) => {
               const isOverdue = !!(lead.nextFollowUp && lead.nextFollowUp < today && lead.status !== 'Active Account');
               const companySize = lead.employeeCount;
+              const leadId = lead.id || lead._id || `${lead.email}-${index}`;
 
               return (
                 <tr
-                  key={lead.id}
+                  key={leadId}
                   className={`border-b border-border/40 transition-all duration-200 hover:bg-primary/[0.03] ${isOverdue ? 'bg-destructive/5' : index % 2 === 1 ? 'bg-secondary/20' : ''}`}
                 >
+                  {onSelect && (
+                    <td className="text-center px-3 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.includes(leadId)}
+                        onChange={(e) => onSelect(leadId, e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary cursor-pointer"
+                      />
+                    </td>
+                  )}
                   <td className="text-center px-3 py-3 text-muted-foreground text-xs font-medium">{startIndex + index + 1}</td>
 
                   <td className="px-4 py-3">
-                    <Link href={`${basePath}/leads/${lead.id}`} className="font-medium text-foreground hover:text-primary transition-colors">
+                    <Link href={`${basePath}/leads/${leadId}`} className="font-medium text-foreground hover:text-primary transition-colors">
                       {lead.companyName || '—'}
                     </Link>
                   </td>
 
                   <td className="px-4 py-3">
-                    <Link href={`${basePath}/leads/${lead.id}`} className="font-medium text-foreground hover:text-primary transition-colors">
+                    <Link href={`${basePath}/leads/${leadId}`} className="font-medium text-foreground hover:text-primary transition-colors">
                       {lead.name || '—'}
                     </Link>
                   </td>
@@ -175,7 +210,7 @@ export default function LeadTable({ leads, compact = false, startIndex = 0 }: { 
                           size="icon"
                           className="h-8 w-8 text-muted-foreground hover:bg-secondary"
                           title="View Details"
-                          onClick={() => router.push(`${basePath}/leads/${lead.id}`)}
+                          onClick={() => router.push(`${basePath}/leads/${leadId}`)}
                         >
                           <Edit className="h-3.5 w-3.5" />
                         </Button>

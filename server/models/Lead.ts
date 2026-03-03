@@ -1,249 +1,182 @@
 import mongoose, { Schema, Document } from 'mongoose';
-import { PIPELINE_STAGES, PipelineStageKey } from '../constants/pipeline';
 
-export interface IActivity {
-  type: 'call' | 'follow-up' | 'note' | 'status-change' | 'email' | 'linkedin';
-  description: string;
-  timestamp: Date;
-  agent: string;
-}
+export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'proposal' | 'negotiation' | 'won' | 'lost';
 
-export interface IStageHistoryEntry {
-  stage: string;
-  enteredAt: Date;
-  agent: string;
-}
-
-export interface IQualification {
-  rightPerson: boolean;
-  realNeed: boolean;
-  timing: boolean;
-  qualifiedAt: Date | null;
-  qualifiedBy: string;
-}
-
-export interface ICadenceTouch {
-  day: number;
-  type: 'call' | 'email' | 'linkedin';
-  completed: boolean;
-  completedAt?: Date;
-}
-
-export interface ICadence {
-  type: 'cold-14day' | 'warm-fast' | 'custom';
-  startedAt: Date;
-  currentDay: number;
-  touches: ICadenceTouch[];
-}
-
-export interface IEmployeePhone {
-  type: 'office' | 'direct' | 'home' | 'corporate' | 'company';
-  number: string;
-  extension?: string;
-}
-
-export interface IEmployee {
-  name: string;
-  email: string;
-  phones: IEmployeePhone[];
-  linkedin: string;
-  isDecisionMaker: boolean;
-  leftOrganization: boolean;
-}
+export type LeadSource = 'csv_upload' | 'manual' | 'website' | 'referral' | 'linkedin' | 'other';
 
 export interface ILead extends Document {
-  date: Date;
-  source: string;
-  name: string;
-  title: string;
-  companyName: string;
+  firstName: string;
+  lastName: string;
   email: string;
-  workDirectPhone: string;
-  homePhone: string;
-  mobilePhone: string;
-  corporatePhone: string;
-  otherPhone: string;
-  companyPhone: string;
-  employeeCount: number | null;
-  employees: IEmployee[];
-  personLinkedinUrl: string;
-  website: string;
-  companyLinkedinUrl: string;
+  phone: string;
+  company: string;
+  jobTitle: string;
+  source: LeadSource;
+  uploadedBy: mongoose.Types.ObjectId;
+  assignedTo: mongoose.Types.ObjectId | null;
+  assignedAt: Date | null;
+  status: LeadStatus;
+  pipelineStage: mongoose.Types.ObjectId;
+  dealValue: number;
+  expectedCloseDate: Date | null;
+  lostReason: string;
+  wonDate: Date | null;
+  tags: string[];
+  customFields: Record<string, unknown>;
+  notes: string;
+  // Soft delete
+  isDeleted: boolean;
+  deletedAt: Date | null;
+  deletedBy: mongoose.Types.ObjectId | null;
+  // Legacy fields kept for backward compatibility
   address: string;
   city: string;
   state: string;
-  status: PipelineStageKey;
-  assignedAgent: string;
-  assignedVA: string;
-  activeServiceDate: Date | null;
-  contractSignDate: Date | null;
-  addedBy: string;
-  closedBy: string;
-  closedAt: Date | null;
-  closedReason: string;
-  notes: string;
-  nextFollowUp: Date | null;
-  callCount: number;
-  lastActivity: Date;
-  revenue: number;
-  activities: IActivity[];
-  stageHistory: IStageHistoryEntry[];
-  // Batch 2 fields
+  website: string;
+  personLinkedinUrl: string;
+  companyLinkedinUrl: string;
+  workDirectPhone: string;
+  mobilePhone: string;
+  homePhone: string;
+  corporatePhone: string;
+  companyPhone: string;
+  otherPhone: string;
+  employeeCount: number | null;
+  employees: Array<{
+    name: string;
+    email: string;
+    linkedin?: string;
+    isDecisionMaker: boolean;
+    leftOrganization: boolean;
+    phones: Array<{
+      type: 'office' | 'direct' | 'home' | 'corporate' | 'company';
+      number: string;
+      extension?: string;
+    }>;
+  }>;
   priority: 'A' | 'B' | 'C';
   segment: string;
-  sourceChannel: string;
-  qualityGatePass: boolean;
-  qualification: IQualification;
-  // Batch 3 fields
-  cadence: ICadence;
+  revenue: number;
+  // Virtuals
+  fullName: string;
 }
-
-const StageHistorySchema = new Schema<IStageHistoryEntry>(
-  {
-    stage: { type: String, required: true },
-    enteredAt: { type: Date, default: Date.now },
-    agent: { type: String, default: '' },
-  },
-  { _id: false }
-);
-
-const ActivitySchema = new Schema<IActivity>(
-  {
-    type: { type: String, enum: ['call', 'follow-up', 'note', 'status-change', 'email', 'linkedin'], required: true },
-    description: { type: String, required: true },
-    timestamp: { type: Date, required: true },
-    agent: { type: String, required: true },
-  },
-  { _id: true }
-);
-
-const EmployeePhoneSchema = new Schema<IEmployeePhone>(
-  {
-    type: { type: String, enum: ['office', 'direct', 'home', 'corporate', 'company'], required: true },
-    number: { type: String, required: true },
-    extension: { type: String, default: '' },
-  },
-  { _id: false }
-);
-
-const EmployeeSchema = new Schema<IEmployee>(
-  {
-    name: { type: String, required: true, default: '' },
-    email: { type: String, default: '' },
-    phones: { type: [EmployeePhoneSchema], default: [] },
-    linkedin: { type: String, default: '' },
-    isDecisionMaker: { type: Boolean, default: false },
-    leftOrganization: { type: Boolean, default: false },
-  },
-  { _id: true }
-);
 
 const LeadSchema = new Schema<ILead>(
   {
-    date: { type: Date, default: Date.now },
-    source: { type: String, enum: ['CSV Import', 'Manual', 'Website', 'Referral', 'LinkedIn', 'Cold – High Fit', 'Warm – Engaged', 'Cold – Quick Sourced', 'Cold – Bulk Data', 'Other'], default: 'Manual' },
-    name: { type: String, required: true },
-    title: { type: String, default: '' },
-    companyName: { type: String, default: '' },
-    email: { type: String, default: '' },
-    workDirectPhone: { type: String, default: '' },
-    homePhone: { type: String, default: '' },
-    mobilePhone: { type: String, default: '' },
-    corporatePhone: { type: String, default: '' },
-    otherPhone: { type: String, default: '' },
-    companyPhone: { type: String, default: '' },
-    employeeCount: { type: Number, default: null },
-    employees: { type: [EmployeeSchema], default: [] },
-    personLinkedinUrl: { type: String, default: '' },
-    website: { type: String, default: '' },
-    companyLinkedinUrl: { type: String, default: '' },
+    firstName: { type: String, default: '' },
+    lastName: { type: String, default: '' },
+    email: { type: String, default: '', index: { sparse: true } },
+    phone: { type: String, default: '' },
+    company: { type: String, default: '' },
+    jobTitle: { type: String, default: '' },
+    source: {
+      type: String,
+      enum: ['csv_upload', 'manual', 'website', 'referral', 'linkedin', 'other'],
+      default: 'manual',
+    },
+    uploadedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    assignedTo: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    assignedAt: { type: Date, default: null },
+    status: {
+      type: String,
+      enum: ['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost'],
+      default: 'new',
+    },
+    pipelineStage: { type: Schema.Types.ObjectId, ref: 'PipelineStage', default: null },
+    dealValue: { type: Number, default: 0 },
+    expectedCloseDate: { type: Date, default: null },
+    lostReason: { type: String, default: '' },
+    wonDate: { type: Date, default: null },
+    tags: [{ type: String }],
+    customFields: { type: Schema.Types.Mixed, default: {} },
+    notes: { type: String, default: '' },
+    // Soft delete
+    isDeleted: { type: Boolean, default: false },
+    deletedAt: { type: Date, default: null },
+    deletedBy: { type: Schema.Types.ObjectId, ref: 'User', default: null },
+    // Legacy / additional contact fields
     address: { type: String, default: '' },
     city: { type: String, default: '' },
     state: { type: String, default: '' },
-    status: { type: String, enum: [...PIPELINE_STAGES], default: 'New Lead' },
-    assignedAgent: { type: String, required: true },
-    assignedVA: { type: String, default: '' },
-    activeServiceDate: { type: Date, default: null },
-    contractSignDate: { type: Date, default: null },
-    addedBy: { type: String, default: '' },
-    closedBy: { type: String, default: '' },
-    closedAt: { type: Date, default: null },
-    closedReason: { type: String, default: '' },
-    notes: { type: String, default: '' },
-    nextFollowUp: { type: Date, default: null },
-    callCount: { type: Number, default: 0 },
-    lastActivity: { type: Date, default: Date.now },
-    revenue: { type: Number, default: 0 },
-    activities: [ActivitySchema],
-    stageHistory: [StageHistorySchema],
-    // Batch 2 fields
+    website: { type: String, default: '' },
+    personLinkedinUrl: { type: String, default: '' },
+    companyLinkedinUrl: { type: String, default: '' },
+    workDirectPhone: { type: String, default: '' },
+    mobilePhone: { type: String, default: '' },
+    homePhone: { type: String, default: '' },
+    corporatePhone: { type: String, default: '' },
+    companyPhone: { type: String, default: '' },
+    otherPhone: { type: String, default: '' },
+    employeeCount: { type: Number, default: null },
+    employees: [
+      {
+        name: { type: String, default: '' },
+        email: { type: String, default: '' },
+        linkedin: { type: String },
+        isDecisionMaker: { type: Boolean, default: false },
+        leftOrganization: { type: Boolean, default: false },
+        phones: [
+          {
+            type: {
+              type: String,
+              enum: ['office', 'direct', 'home', 'corporate', 'company'],
+              default: 'direct',
+            },
+            number: { type: String, default: '' },
+            extension: { type: String },
+          },
+        ],
+      },
+    ],
     priority: { type: String, enum: ['A', 'B', 'C'], default: 'C' },
-    segment: { type: String, enum: ['Insurance', 'Accounting', 'Finance', 'Healthcare', 'Legal', 'Other', ''], default: '' },
-    sourceChannel: { type: String, default: '' },
-    qualityGatePass: { type: Boolean, default: false },
-    qualification: {
-      rightPerson: { type: Boolean, default: false },
-      realNeed: { type: Boolean, default: false },
-      timing: { type: Boolean, default: false },
-      qualifiedAt: { type: Date, default: null },
-      qualifiedBy: { type: String, default: '' },
-    },
-    // Batch 3 fields
-    cadence: {
-      type: { type: String, enum: ['cold-14day', 'warm-fast', 'custom'], default: 'cold-14day' },
-      startedAt: { type: Date, default: null },
-      currentDay: { type: Number, default: 0 },
-      touches: [{
-        day: Number,
-        type: { type: String, enum: ['call', 'email', 'linkedin'] },
-        completed: { type: Boolean, default: false },
-        completedAt: Date,
-      }],
-    },
+    segment: { type: String, default: '' },
+    revenue: { type: Number, default: 0 },
   },
-  { timestamps: true }
+  {
+    timestamps: true,
+    optimisticConcurrency: true,
+  }
 );
 
 // ── Indexes tailored to query patterns ──
-LeadSchema.index({ assignedAgent: 1, status: 1 });
-LeadSchema.index({ lastActivity: -1 });
-LeadSchema.index({ status: 1 });
-LeadSchema.index({ closedBy: 1, status: 1 });
-LeadSchema.index({ addedBy: 1 });
-LeadSchema.index({ nextFollowUp: 1 });
+LeadSchema.index({ assignedTo: 1, status: 1 });
+LeadSchema.index({ pipelineStage: 1, isDeleted: 1 });
+LeadSchema.index({ uploadedBy: 1, createdAt: -1 });
+LeadSchema.index({ status: 1, createdAt: -1 });
+LeadSchema.index({ isDeleted: 1, createdAt: -1 });
 // Text index for search queries
-LeadSchema.index({ name: 'text', email: 'text', companyName: 'text' });
+LeadSchema.index({ firstName: 'text', lastName: 'text', email: 'text', company: 'text' });
 
-// ── Cap unbounded embedded arrays to prevent 16MB document overflow ──
-const MAX_ACTIVITIES = 100;
-const MAX_STAGE_HISTORY = 50;
-LeadSchema.pre('save', function () {
-  if (this.activities && this.activities.length > MAX_ACTIVITIES) {
-    this.activities = this.activities.slice(-MAX_ACTIVITIES) as any;
-  }
-  if (this.stageHistory && this.stageHistory.length > MAX_STAGE_HISTORY) {
-    this.stageHistory = this.stageHistory.slice(-MAX_STAGE_HISTORY) as any;
-  }
+// ── Virtual: fullName ──
+LeadSchema.virtual('fullName').get(function () {
+  return `${this.firstName || ''} ${this.lastName || ''}`.trim();
 });
 
+// ── Pre-find hooks: exclude soft-deleted by default ──
+function excludeDeleted(this: mongoose.Query<unknown, unknown>) {
+  const filter = this.getFilter();
+  // Only add isDeleted filter if not explicitly querying for deleted
+  if (filter.isDeleted === undefined) {
+    this.where({ isDeleted: { $ne: true } });
+  }
+}
+
+LeadSchema.pre('find', excludeDeleted);
+LeadSchema.pre('findOne', excludeDeleted);
+LeadSchema.pre('findOneAndUpdate', excludeDeleted);
+LeadSchema.pre('countDocuments', excludeDeleted);
+
+// ── JSON transform ──
 LeadSchema.set('toJSON', {
-  transform: (_doc, ret: any) => {
-    ret.id = ret._id.toString();
+  virtuals: true,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  transform: (_doc: any, ret: any) => {
+    ret.id = ret._id?.toString();
     // Derive primary phone from first available phone field
-    ret.phone = ret.workDirectPhone || ret.mobilePhone || ret.homePhone || ret.corporatePhone || ret.companyPhone || ret.otherPhone || '';
-    if (ret.activities) {
-      ret.activities = ret.activities.map((a: any) => ({
-        ...a,
-        id: a._id?.toString(),
-        timestamp: a.timestamp?.toISOString?.()?.split('T')[0] || a.timestamp,
-      }));
+    if (!ret.phone) {
+      ret.phone = ret.workDirectPhone || ret.mobilePhone || ret.homePhone
+        || ret.corporatePhone || ret.companyPhone || ret.otherPhone || '';
     }
-    if (ret.date) ret.date = ret.date.toISOString().split('T')[0];
-    if (ret.nextFollowUp) ret.nextFollowUp = ret.nextFollowUp.toISOString().split('T')[0];
-    if (ret.lastActivity) ret.lastActivity = ret.lastActivity.toISOString().split('T')[0];
-    if (ret.closedAt) ret.closedAt = ret.closedAt.toISOString().split('T')[0];
-    if (ret.activeServiceDate) ret.activeServiceDate = ret.activeServiceDate.toISOString().split('T')[0];
-    if (ret.contractSignDate) ret.contractSignDate = ret.contractSignDate.toISOString().split('T')[0];
     delete ret.__v;
     return ret;
   },

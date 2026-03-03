@@ -2,17 +2,17 @@ import { z } from 'zod';
 
 const envSchema = z.object({
     NODE_ENV: z.enum(['development', 'production', 'test']).default('development'),
-    MONGODB_URI: z.string().url(),
+    MONGODB_URI: z.string().min(1, 'MONGODB_URI is required'),
     JWT_SECRET: z.string().min(32),
     PORT: z.string().default('3000'),
-    APP_URL: z.string().url().default('http://localhost:3000'),
+    APP_URL: z.string().default('http://localhost:3000'),
 
     // Email (SMTP) config
     SMTP_HOST: z.string().optional(),
-    SMTP_PORT: z.string().transform(Number).optional(),
+    SMTP_PORT: z.string().transform(Number).pipe(z.number().int().positive()).optional(),
     SMTP_USER: z.string().optional(),
     SMTP_PASS: z.string().optional(),
-    SMTP_FROM: z.string().email().optional(),
+    SMTP_FROM: z.string().optional(),
 
     // CORS 
     ALLOWED_ORIGINS: z.string().optional(),

@@ -247,7 +247,7 @@ export default function HRLeadTracker() {
                   >
                     <td className="py-3">
                       <div>
-                        <p className="font-medium">{lead.name}</p>
+                        <p className="font-medium">{lead.firstName} {lead.lastName}</p>
                         <p className="text-xs text-muted-foreground">{lead.email}</p>
                       </div>
                     </td>
@@ -258,17 +258,17 @@ export default function HRLeadTracker() {
                       </Badge>
                     </td>
                     <td className="py-3">
-                      {lead.addedBy ? (
+                      {lead.uploadedBy ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-medium text-blue-700">
                           <UserPlus className="h-3 w-3" />
-                          {lead.addedBy}
+                          {lead.uploadedBy.name}
                         </span>
                       ) : (
                         <span className="text-muted-foreground text-xs">—</span>
                       )}
                     </td>
                     <td className="py-3">
-                      <span className="text-xs font-medium">{lead.assignedAgent || '—'}</span>
+                      <span className="text-xs font-medium">{lead.assignedTo?.name || '—'}</span>
                     </td>
                     <td className="py-3">
                       {lead.callAgents && lead.callAgents.length > 0 ? (
@@ -288,10 +288,10 @@ export default function HRLeadTracker() {
                       )}
                     </td>
                     <td className="py-3">
-                      {lead.closedBy ? (
+                      {lead.status === 'won' || lead.status === 'lost' ? (
                         <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-medium text-emerald-700">
                           <CheckCircle2 className="h-3 w-3" />
-                          {lead.closedBy}
+                          {lead.assignedTo?.name || '—'}
                         </span>
                       ) : (
                         <span className="text-muted-foreground text-xs">—</span>
@@ -312,7 +312,7 @@ export default function HRLeadTracker() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Users className="h-5 w-5 text-primary" />
-              {selectedLead?.name} — Lead Details
+              {selectedLead?.firstName} {selectedLead?.lastName} — Lead Details
             </DialogTitle>
           </DialogHeader>
           {selectedLead && <LeadDetailContent lead={selectedLead} />}
@@ -329,7 +329,7 @@ function LeadDetailContent({ lead }: { lead: any }) {
       {/* Lead Info */}
       <div className="rounded-xl border border-border bg-card p-4">
         <div className="grid grid-cols-2 gap-4 text-sm">
-          <InfoRow label="Name" value={lead.name} />
+          <InfoRow label="Name" value={`${lead.firstName} ${lead.lastName}`} />
           <InfoRow label="Email" value={lead.email} />
           <InfoRow label="Company" value={lead.companyName} />
           <InfoRow label="Phone" value={lead.phone} />
@@ -337,8 +337,8 @@ function LeadDetailContent({ lead }: { lead: any }) {
           <InfoRow label="State" value={lead.state} />
           <InfoRow label="Source" value={lead.source} />
           <InfoRow label="Status" value={lead.status} />
-          <InfoRow label="Assigned To" value={lead.assignedAgent} />
-          {lead.closedAt && <InfoRow label="Closed Date" value={lead.closedAt} />}
+          <InfoRow label="Assigned To" value={lead.assignedTo?.name} />
+          {lead.wonDate && <InfoRow label="Closed Date" value={new Date(lead.wonDate).toLocaleDateString()} />}
         </div>
       </div>
 
@@ -348,8 +348,8 @@ function LeadDetailContent({ lead }: { lead: any }) {
         <div className="grid grid-cols-3 gap-3">
           <div className="rounded-xl border border-border bg-blue-50/50 p-3 text-center">
             <UserPlus className="h-4 w-4 text-blue-600 mx-auto mb-1" />
-            <p className="text-xs text-muted-foreground">Added By</p>
-            <p className="text-sm font-medium">{lead.addedBy || '—'}</p>
+            <p className="text-xs text-muted-foreground">Uploaded By</p>
+            <p className="text-sm font-medium">{lead.uploadedBy?.name || '—'}</p>
           </div>
           <div className="rounded-xl border border-border bg-violet-50/50 p-3 text-center">
             <Phone className="h-4 w-4 text-violet-600 mx-auto mb-1" />
@@ -358,8 +358,8 @@ function LeadDetailContent({ lead }: { lead: any }) {
           </div>
           <div className="rounded-xl border border-border bg-emerald-50/50 p-3 text-center">
             <CheckCircle2 className="h-4 w-4 text-emerald-600 mx-auto mb-1" />
-            <p className="text-xs text-muted-foreground">Closed By</p>
-            <p className="text-sm font-medium">{lead.closedBy || '—'}</p>
+            <p className="text-xs text-muted-foreground">Assigned To</p>
+            <p className="text-sm font-medium">{lead.assignedTo?.name || '—'}</p>
           </div>
         </div>
       </div>
@@ -373,15 +373,11 @@ function LeadDetailContent({ lead }: { lead: any }) {
               <div key={i} className="flex items-center gap-3 rounded-xl border border-border p-3 text-sm hover:bg-muted/30 transition-colors">
                 <Phone className="h-4 w-4 text-muted-foreground shrink-0" />
                 <div className="flex-1">
-                  <p className="font-medium">{call.agentName}</p>
-                  <p className="text-xs text-muted-foreground">{call.date} · {call.duration}</p>
+                  <p className="font-medium">{call.userId?.name || 'Unknown'}</p>
+                  <p className="text-xs text-muted-foreground">{new Date(call.createdAt).toLocaleDateString()}</p>
                 </div>
-                <Badge variant="secondary" className={
-                  call.status === 'Completed' ? 'bg-emerald-100 text-emerald-700'
-                    : call.status === 'Missed' ? 'bg-red-100 text-red-700'
-                      : 'bg-amber-100 text-amber-700'
-                }>
-                  {call.status}
+                <Badge variant="secondary" className="bg-emerald-100 text-emerald-700">
+                  Completed
                 </Badge>
               </div>
             ))}

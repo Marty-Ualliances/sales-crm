@@ -1,0 +1,20 @@
+﻿server/routes/calls.ts(91,14): error TS2339: Property 'callCount' does not exist on type 'Document<unknown, {}, ILead, {}, DefaultSchemaOptions> & ILead & Required<{ _id: ObjectId; }> & { __v: number; } & { ...; }'.
+server/routes/calls.ts(91,32): error TS2339: Property 'callCount' does not exist on type 'Document<unknown, {}, ILead, {}, DefaultSchemaOptions> & ILead & Required<{ _id: ObjectId; }> & { __v: number; } & { ...; }'.
+server/routes/calls.ts(92,14): error TS2339: Property 'lastActivity' does not exist on type 'Document<unknown, {}, ILead, {}, DefaultSchemaOptions> & ILead & Required<{ _id: ObjectId; }> & { __v: number; } & { ...; }'.
+server/routes/calls.ts(94,14): error TS2339: Property 'activities' does not exist on type 'Document<unknown, {}, ILead, {}, DefaultSchemaOptions> & ILead & Required<{ _id: ObjectId; }> & { __v: number; } & { ...; }'.
+server/routes/notifications.ts(14,31): error TS2367: This comparison appears to be unintentional because the types '"admin" | "lead_gen" | "closer" | "manager" | "hr"' and '"leadgen"' have no overlap.
+server/routes/notifications.ts(44,31): error TS2367: This comparison appears to be unintentional because the types '"admin" | "lead_gen" | "closer" | "manager" | "hr"' and '"leadgen"' have no overlap.
+server/routes/outreach.ts(21,36): error TS2367: This comparison appears to be unintentional because the types '"admin" | "lead_gen" | "closer" | "manager" | "hr"' and '"leadgen"' have no overlap.
+server/seed.ts(47,35): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Type '{ name: string; email: string; password: string; avatar: string; role: string; leadsAssigned: number; callsMade: number; followUpsCompleted: number; followUpsPending: number; conversionRate: number; revenueClosed: number; }[]' has no properties in common with type '{ name?: StringQueryTypeCasting | undefined; email?: StringQueryTypeCasting | undefined; password?: StringQueryTypeCasting | undefined; ... 66 more ...; validateSync?: { ...; } | ... 1 more ... | undefined; }'.
+server/seed.ts(55,32): error TS2339: Property 'length' does not exist on type 'never'.
+server/seed.ts(61,35): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Type '({ date: Date; source: string; name: string; title: string; companyName: string; email: string; workDirectPhone: string; mobilePhone: string; homePhone: string; corporatePhone: string; otherPhone: string; ... 21 more ...; activities: { ...; }[]; } | { ...; } | { ...; } | { ...; } | { ...; })[]' has no properties in common with type '{ firstName?: StringQueryTypeCasting | undefined; lastName?: StringQueryTypeCasting | undefined; email?: StringQueryTypeCasting | undefined; ... 93 more ...; validateSync?: { ...; } | ... 1 more ... | undefined; }'.
+server/seed.ts(73,32): error TS2339: Property 'length' does not exist on type 'never'.
+server/seed.ts(77,9): error TS2339: Property 'forEach' does not exist on type 'never'.
+server/seed.ts(96,51): error TS2769: No overload matches this call.
+  The last overload gave the following error.
+    Type '({ type: string; title: string; message: string; timestamp: Date; read: boolean; leadId: string; } | { type: string; title: string; message: string; timestamp: Date; read: boolean; })[]' has no properties in common with type '{ userId?: ObjectId | { readonly _bsontype?: StringQueryTypeCasting | undefined; id?: { [x: number]: number | undefined; readonly BYTES_PER_ELEMENT?: number | undefined; ... 37 more ...; readonly [Symbol.toStringTag]?: "Uint8Array" | undefined; } | { ...; } | undefined; ... 7 more ...; readonly [bsonType]?: StringQu...'.
+server/seed.ts(104,40): error TS2339: Property 'length' does not exist on type 'never'.

@@ -7,7 +7,7 @@ const router = Router();
 // GET /api/notes — get only the current user's notes
 router.get('/', auth, async (req: AuthRequest, res: Response) => {
   try {
-    const notes = await Note.find({ userId: req.user!.id }).sort({ createdAt: -1 });
+    const notes = await Note.find({ userId: req.user!.id }).sort({ createdAt: -1 }).limit(500);
     res.json(notes);
   } catch {
     res.status(500).json({ error: 'Server error' });

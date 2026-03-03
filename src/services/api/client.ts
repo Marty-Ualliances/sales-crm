@@ -43,8 +43,10 @@ export async function request<T>(
     options: RequestInit = {},
     isRetry = false
 ): Promise<T> {
+    // Don't set Content-Type for FormData — the browser needs to set boundary automatically
+    const isFormData = typeof FormData !== 'undefined' && options.body instanceof FormData;
     const headers: Record<string, string> = {
-        'Content-Type': 'application/json',
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...(options.headers as Record<string, string>),
     };
 

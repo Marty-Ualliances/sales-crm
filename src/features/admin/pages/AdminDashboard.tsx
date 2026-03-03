@@ -1,19 +1,20 @@
 'use client';
 import { useRouter } from 'next/navigation';
-import { AlertTriangle, CalendarCheck, UserPlus, Loader2, BarChart2, Coffee, Phone, CheckCircle } from 'lucide-react';
+import { AlertTriangle, CalendarCheck, UserPlus, Loader2, BarChart2, Coffee, Phone, CheckCircle, Users } from 'lucide-react';
 import KPICard from '@/components/common/KPICard';
 import RecentActivityFeed from '@/components/common/RecentActivityFeed';
 import { useLeads, useAgents, useKPIs, useCalls } from '@/hooks/useApi';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { useState } from 'react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell } from 'recharts';
 import DateFilter, { DateRange, filterByDateRange } from '@/components/common/DateFilter';
 import { ActiveAccountsListModal } from '../../leads/components/ActiveAccountsListModal';
 
 export default function AdminDashboard() {
-  const { data: leads = [], isLoading: leadsLoading } = useLeads();
+  const { data: leads = [] } = useLeads();
   const { data: agents = [], isLoading: agentsLoading } = useAgents();
-  const { data: kpis, isLoading: kpisLoading } = useKPIs();
+  const { isLoading: kpisLoading } = useKPIs();
   const { data: allCalls = [] } = useCalls();
   const router = useRouter();
 
@@ -24,12 +25,17 @@ export default function AdminDashboard() {
   // Filter leads for KPI cards
   const filteredLeads = filterByDateRange(leads, dateRange);
 
-  // Calculate new leads (last 7 days)
-  const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
-  const newLeadsCount = leads.filter((l: any) => new Date(l.date) >= sevenDaysAgo).length;
+  const getLeadDate = (lead: any) => lead?.createdAt || lead?.date || null;
+
+  const isStatus = (lead: any, ...statuses: string[]) => {
+    const s = String(lead?.status || '').toLowerCase();
+    return statuses.some((status) => s === status.toLowerCase());
+  };
 
   // Filter leads and calls by selected user
-  const chartLeads = selectedUser === 'all' ? leads : leads.filter((l: any) => l.assignedAgent === selectedUser);
+  const chartLeads = selectedUser === 'all'
+    ? leads
+    : leads.filter((l: any) => (l.assignedTo?.name || l.assignedAgent) === selectedUser);
   const chartCalls = selectedUser === 'all' ? allCalls : allCalls.filter((c: any) => c.agent === selectedUser);
 
   // Generate chart data for leads + calls over the last 14 days
@@ -37,7 +43,9 @@ export default function AdminDashboard() {
     const date = new Date(Date.now() - (13 - i) * 24 * 60 * 60 * 1000);
     const dateStr = date.toISOString().split('T')[0];
     const leadCount = chartLeads.filter((l: any) => {
-      const ld = new Date(l.date).toISOString().split('T')[0];
+      const sourceDate = getLeadDate(l);
+      if (!sourceDate) return false;
+      const ld = new Date(sourceDate).toISOString().split('T')[0];
       return ld === dateStr;
     }).length;
     const callCount = chartCalls.filter((c: any) => {
@@ -110,19 +118,19 @@ export default function AdminDashboard() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="animate-slide-up stagger-1">
-          <KPICard title="New Leads" value={filteredLeads.filter((l: any) => l.status === 'New Lead').length} icon={UserPlus} link="/admin/leads" />
+          <KPICard title="New Leads" value={filteredLeads.filter((l: any) => isStatus(l, 'new', 'new lead')).length} icon={UserPlus} link="/admin/leads" />
         </div>
         <div className="animate-slide-up stagger-2">
-          <KPICard title="In Progress" value={filteredLeads.filter((l: any) => l.status === 'Working').length} icon={AlertTriangle} link="/admin/leads" />
+          <KPICard title="In Progress" value={filteredLeads.filter((l: any) => isStatus(l, 'contacted', 'qualified', 'proposal', 'negotiation', 'working')).length} icon={AlertTriangle} link="/admin/leads" />
         </div>
         <div className="animate-slide-up stagger-3">
-          <KPICard title="Contacted" value={filteredLeads.filter((l: any) => l.status === 'Contacted').length} icon={Phone} link="/admin/leads" />
+          <KPICard title="Contacted" value={filteredLeads.filter((l: any) => isStatus(l, 'contacted')).length} icon={Phone} link="/admin/leads" />
         </div>
         <div className="animate-slide-up stagger-4">
-          <KPICard title="Appointment Setter" value={filteredLeads.filter((l: any) => l.status === 'Meeting Booked').length} icon={CheckCircle} link="/admin/leads" />
+          <KPICard title="Appointment Setter" value={filteredLeads.filter((l: any) => isStatus(l, 'qualified', 'meeting booked')).length} icon={CheckCircle} link="/admin/leads" />
         </div>
         <div className="animate-slide-up stagger-5">
-          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Closed Won').length} icon={BarChart2} onClick={() => setIsActiveAccountsModalOpen(true)} />
+          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => isStatus(l, 'won', 'closed won')).length} icon={BarChart2} onClick={() => setIsActiveAccountsModalOpen(true)} />
         </div>
       </div>
 
@@ -149,8 +157,8 @@ export default function AdminDashboard() {
       </div>
 
       {/* Team Overview */}
-      <div>
-        <div className="flex items-center justify-between mb-4">
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-foreground">Team Overview</h2>
           <button
             onClick={() => router.push('/admin/team')}
@@ -159,76 +167,98 @@ export default function AdminDashboard() {
             Manage Team →
           </button>
         </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 auto-rows-fr">
-          {agents.map((agent: any, idx: number) => {
-            const addedLeads = leads.filter((l: any) => l.addedBy === agent.name);
-            const convertedLeads = addedLeads.filter((l: any) => l.status === 'Closed Won');
-            const sdrMeetings = leads.filter((l: any) => l.assignedAgent === agent.name && (l.status === 'Meeting Booked' || l.status === 'Meeting Completed'));
 
-            return (
-              <div
-                key={agent.id}
-                className="rounded-xl border border-border bg-card p-4 shadow-card hover:-translate-y-1 hover:shadow-[0_8px_30px_hsl(var(--primary)/0.1)] transition-all duration-300 animate-slide-up flex flex-col group"
-                style={{ animationDelay: `${idx * 80}ms` }}
-              >
-                <div className="flex items-center gap-3 mb-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground text-sm font-medium ring-2 ring-primary/20 group-hover:ring-primary/40 transition-all">
-                    {agent.avatar}
+        {agentsLoading ? (
+          <div className="flex items-center justify-center py-12 border border-dashed rounded-xl">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground mr-2" />
+            <span className="text-sm text-muted-foreground">Loading team data...</span>
+          </div>
+        ) : agents.length === 0 ? (
+          <div className="text-center py-12 border border-dashed rounded-xl bg-secondary/5">
+            <Users className="h-8 w-8 text-muted-foreground mx-auto mb-2 opacity-50" />
+            <p className="text-sm text-muted-foreground">No team members found.</p>
+            <Button variant="link" onClick={() => router.push('/admin/team')} className="mt-1">
+              Add your first team member
+            </Button>
+          </div>
+        ) : (
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 auto-rows-fr">
+            {agents.map((agent: any, idx: number) => {
+              const agentId = agent.id || agent._id;
+              const addedLeads = leads.filter((l: any) => {
+                const uploadedByName = l.uploadedBy?.name || l.addedBy;
+                return uploadedByName === agent.name;
+              });
+              const convertedLeads = addedLeads.filter((l: any) => isStatus(l, 'won', 'closed won'));
+              const sdrMeetings = leads.filter((l: any) => {
+                const assignedName = l.assignedTo?.name || l.assignedAgent;
+                return assignedName === agent.name && isStatus(l, 'qualified', 'proposal', 'meeting booked', 'meeting completed');
+              });
+
+              return (
+                <div
+                  key={agentId}
+                  className="rounded-xl border border-border bg-card p-4 shadow-card hover:-translate-y-1 hover:shadow-[0_8px_30px_hsl(var(--primary)/0.1)] transition-all duration-300 animate-slide-up flex flex-col group"
+                  style={{ animationDelay: `${idx * 80}ms` }}
+                >
+                  <div className="flex items-center gap-3 mb-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-primary to-primary/70 text-primary-foreground text-sm font-medium ring-2 ring-primary/20 group-hover:ring-primary/40 transition-all">
+                      {agent.avatar}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-semibold text-foreground truncate">{agent.name}</p>
+                      <Badge variant={agent.role === 'admin' ? 'default' : 'secondary'} className="text-xs">
+                        {agent.role}
+                      </Badge>
+                    </div>
                   </div>
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-foreground truncate">{agent.name}</p>
-                    <Badge variant={agent.role === 'admin' ? 'default' : 'secondary'} className="text-xs">
-                      {agent.role}
-                    </Badge>
+                  <div className={`grid ${agent.role === 'sdr' ? 'grid-cols-3' : 'grid-cols-2'} gap-2 text-center mt-auto`}>
+                    {agent.role === 'leadgen' || agent.role === 'lead_gen' ? (
+                      <>
+                        <div className="rounded-md bg-secondary/50 p-2 text-center">
+                          <p className="text-lg font-bold text-foreground">{addedLeads.length}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Leads Added</p>
+                        </div>
+                        <div className="rounded-md bg-secondary/50 p-2 text-center">
+                          <p className="text-lg font-bold text-foreground">{convertedLeads.length}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Converted</p>
+                        </div>
+                      </>
+                    ) : agent.role === 'sdr' ? (
+                      <>
+                        <div className="rounded-md bg-secondary/50 p-2 flex flex-col items-center justify-center">
+                          <p className="text-base font-bold text-foreground leading-none mb-1">{agent.callsMade || 0}</p>
+                          <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Calls</p>
+                        </div>
+                        <div className="rounded-md bg-secondary/50 p-2 flex flex-col items-center justify-center">
+                          <p className="text-base font-bold text-foreground leading-none mb-1">{sdrMeetings.length}</p>
+                          <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Meetings</p>
+                        </div>
+                        <div className="rounded-md bg-secondary/50 p-2 flex flex-col items-center justify-center">
+                          <p className="text-base font-bold text-foreground leading-none mb-1">{agent.followUpsPending || 0}</p>
+                          <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Follow-ups</p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="rounded-md bg-secondary/50 p-2">
+                          <p className="text-lg font-bold text-foreground">{agent.leadsAssigned}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Leads</p>
+                        </div>
+                        <div className="rounded-md bg-secondary/50 p-2">
+                          <p className="text-lg font-bold text-foreground">{agent.callsMade || 0}</p>
+                          <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Calls</p>
+                        </div>
+                      </>
+                    )}
                   </div>
                 </div>
-                <div className={`grid ${agent.role === 'sdr' ? 'grid-cols-3' : 'grid-cols-2'} gap-2 text-center mt-auto`}>
-                  {agent.role === 'leadgen' ? (
-                    <>
-                      <div className="rounded-md bg-secondary/50 p-2 text-center">
-                        <p className="text-lg font-bold text-foreground">{addedLeads.length}</p>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Leads Added</p>
-                      </div>
-                      <div className="rounded-md bg-secondary/50 p-2 text-center">
-                        <p className="text-lg font-bold text-foreground">{convertedLeads.length}</p>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Converted</p>
-                      </div>
-                    </>
-                  ) : agent.role === 'sdr' ? (
-                    <>
-                      <div className="rounded-md bg-secondary/50 p-2 flex flex-col items-center justify-center">
-                        <p className="text-base font-bold text-foreground leading-none mb-1">{agent.callsMade || 0}</p>
-                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Calls</p>
-                      </div>
-                      <div className="rounded-md bg-secondary/50 p-2 flex flex-col items-center justify-center">
-                        <p className="text-base font-bold text-foreground leading-none mb-1">{sdrMeetings.length}</p>
-                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Meetings</p>
-                      </div>
-                      <div className="rounded-md bg-secondary/50 p-2 flex flex-col items-center justify-center">
-                        <p className="text-base font-bold text-foreground leading-none mb-1">{agent.followUpsCompleted || 0}</p>
-                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider font-semibold">Follow-ups</p>
-                      </div>
-                    </>
-                  ) : (
-                    <>
-                      <div className="rounded-md bg-secondary/50 p-2">
-                        <p className="text-lg font-bold text-foreground">{agent.leadsAssigned}</p>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Leads</p>
-                      </div>
-                      <div className="rounded-md bg-secondary/50 p-2">
-                        <p className="text-lg font-bold text-foreground">{agent.callsMade || 0}</p>
-                        <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-semibold">Calls</p>
-                      </div>
-                    </>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
-      {/* Recent Activity Feed */}
       <RecentActivityFeed />
 
       {/* Daily Activity Bar Chart */}
@@ -246,7 +276,7 @@ export default function AdminDashboard() {
             >
               <option value="all">All Team Members</option>
               {agents.map((agent: any) => (
-                <option key={agent.id} value={agent.name}>{agent.name}</option>
+                <option key={agent.id || agent._id} value={agent.name}>{agent.name}</option>
               ))}
             </select>
             <div className="flex items-center gap-1.5 hidden sm:flex">
