@@ -27,16 +27,11 @@ export default function AdminDashboard() {
 
   const getLeadDate = (lead: any) => lead?.createdAt || lead?.date || null;
 
-  const isStatus = (lead: any, ...statuses: string[]) => {
-    const s = String(lead?.status || '').toLowerCase();
-    return statuses.some((status) => s === status.toLowerCase());
-  };
-
   // Filter leads and calls by selected user
   const chartLeads = selectedUser === 'all'
     ? leads
     : leads.filter((l: any) => (l.assignedTo?.name || l.assignedAgent) === selectedUser);
-  const chartCalls = selectedUser === 'all' ? allCalls : allCalls.filter((c: any) => c.agent === selectedUser);
+  const chartCalls = selectedUser === 'all' ? allCalls : allCalls.filter((c: any) => c.agentName === selectedUser);
 
   // Generate chart data for leads + calls over the last 14 days
   const chartData = Array.from({ length: 14 }).map((_, i) => {
@@ -118,19 +113,19 @@ export default function AdminDashboard() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <div className="animate-slide-up stagger-1">
-          <KPICard title="New Leads" value={filteredLeads.filter((l: any) => isStatus(l, 'new', 'new lead')).length} icon={UserPlus} link="/admin/leads" />
+          <KPICard title="New Leads" value={filteredLeads.filter((l: any) => l.status === 'New Lead').length} icon={UserPlus} link="/admin/leads" />
         </div>
         <div className="animate-slide-up stagger-2">
-          <KPICard title="In Progress" value={filteredLeads.filter((l: any) => isStatus(l, 'contacted', 'qualified', 'proposal', 'negotiation', 'working')).length} icon={AlertTriangle} link="/admin/leads" />
+          <KPICard title="In Progress" value={filteredLeads.filter((l: any) => l.status === 'In Progress').length} icon={AlertTriangle} link="/admin/leads" />
         </div>
         <div className="animate-slide-up stagger-3">
-          <KPICard title="Contacted" value={filteredLeads.filter((l: any) => isStatus(l, 'contacted')).length} icon={Phone} link="/admin/leads" />
+          <KPICard title="Contacted" value={filteredLeads.filter((l: any) => l.status === 'Contacted').length} icon={Phone} link="/admin/leads" />
         </div>
         <div className="animate-slide-up stagger-4">
-          <KPICard title="Appointment Setter" value={filteredLeads.filter((l: any) => isStatus(l, 'qualified', 'meeting booked')).length} icon={CheckCircle} link="/admin/leads" />
+          <KPICard title="Appointment Set" value={filteredLeads.filter((l: any) => l.status === 'Appointment Set').length} icon={CheckCircle} link="/admin/leads" />
         </div>
         <div className="animate-slide-up stagger-5">
-          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => isStatus(l, 'won', 'closed won')).length} icon={BarChart2} onClick={() => setIsActiveAccountsModalOpen(true)} />
+          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Active Account').length} icon={BarChart2} onClick={() => setIsActiveAccountsModalOpen(true)} />
         </div>
       </div>
 
@@ -189,10 +184,10 @@ export default function AdminDashboard() {
                 const uploadedByName = l.uploadedBy?.name || l.addedBy;
                 return uploadedByName === agent.name;
               });
-              const convertedLeads = addedLeads.filter((l: any) => isStatus(l, 'won', 'closed won'));
+              const convertedLeads = addedLeads.filter((l: any) => l.status === 'Active Account');
               const sdrMeetings = leads.filter((l: any) => {
                 const assignedName = l.assignedTo?.name || l.assignedAgent;
-                return assignedName === agent.name && isStatus(l, 'qualified', 'proposal', 'meeting booked', 'meeting completed');
+                return assignedName === agent.name && (l.status === 'Appointment Set' || l.status === 'Active Account');
               });
 
               return (

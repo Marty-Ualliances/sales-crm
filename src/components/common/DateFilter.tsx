@@ -1,6 +1,7 @@
 'use client';
 
 import { CalendarDays } from 'lucide-react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 export type DateRange = 'today' | 'yesterday' | 'last7days' | 'thisMonth' | 'allTime';
 
@@ -54,17 +55,18 @@ export default function DateFilter({ value, onChange }: DateFilterProps) {
             <div className="h-8 w-8 rounded-lg bg-primary/10 flex items-center justify-center text-primary shrink-0">
                 <CalendarDays className="h-4 w-4" />
             </div>
-            <select
-                value={value}
-                onChange={(e) => onChange(e.target.value as DateRange)}
-                className="h-8 rounded-md border border-input bg-background px-3 text-sm font-medium text-foreground outline-none focus:ring-1 focus:ring-primary/50"
-            >
-                <option value="today">Today</option>
-                <option value="yesterday">Yesterday</option>
-                <option value="last7days">Last 7 Days</option>
-                <option value="thisMonth">This Month</option>
-                <option value="allTime">All Time</option>
-            </select>
+            <Select value={value} onValueChange={(v) => onChange(v as DateRange)}>
+                <SelectTrigger className="h-8 w-[140px] text-sm font-medium">
+                    <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                    <SelectItem value="today">Today</SelectItem>
+                    <SelectItem value="yesterday">Yesterday</SelectItem>
+                    <SelectItem value="last7days">Last 7 Days</SelectItem>
+                    <SelectItem value="thisMonth">This Month</SelectItem>
+                    <SelectItem value="allTime">All Time</SelectItem>
+                </SelectContent>
+            </Select>
         </div>
     );
 }

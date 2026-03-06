@@ -155,31 +155,20 @@ router.patch('/leads/:id/stage', authenticateToken, checkPermission('leads', 'mo
         const toStageName = newStage.name;
 
         // Validation rules
-        if (toStageName === 'Won') {
+        if (toStageName === 'Active Account') {
             const value = dealValue ?? lead.dealValue;
-            if (!value || value <= 0) {
-                return res.status(400).json({ error: 'dealValue must be greater than 0 for Won stage' });
+            if (value !== undefined && value > 0) {
+                lead.dealValue = value;
             }
-            lead.dealValue = value;
             lead.wonDate = new Date();
-            lead.status = 'won';
+            lead.status = 'Active Account' as any;
             if (expectedCloseDate) lead.expectedCloseDate = new Date(expectedCloseDate);
-        } else if (toStageName === 'Lost') {
-            if (!lostReason) {
-                return res.status(400).json({ error: 'lostReason is required for Lost stage' });
-            }
-            lead.lostReason = lostReason;
-            lead.status = 'lost';
         } else {
-            // Map stage name to status
-            const statusMap: Record<string, string> = {
-                'New': 'new',
-                'Contacted': 'contacted',
-                'Qualified': 'qualified',
-                'Proposal': 'proposal',
-                'Negotiation': 'negotiation',
-            };
-            lead.status = (statusMap[toStageName] || lead.status) as any;
+            // Map stage name directly to status (they match now)
+            const validStatuses = ['New Lead', 'In Progress', 'Contacted', 'Appointment Set', 'Active Account'];
+            if (validStatuses.includes(toStageName)) {
+                lead.status = toStageName as any;
+            }
         }
 
         // Update amount if provided

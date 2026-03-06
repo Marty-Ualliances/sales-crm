@@ -8,6 +8,7 @@ import { disconnectSocket } from '@/hooks/useSocket';
 interface AuthContextType {
   user: AuthUser | null;
   isAuthenticated: boolean;
+  isLoading: boolean;
   impersonatedBy: string | null;
   login: (email: string, password: string) => Promise<{ success: boolean; role?: string; error?: string }>;
   logout: () => void;
@@ -27,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   // Initialize to null universally to prevent SSR/client hydration mismatch.
   // sessionStorage is loaded only in useEffect (client-side).
   const [user, setUser] = useState<AuthUser | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
   const [impersonatedBy, setImpersonatedBy] = useState<string | null>(null);
 
   // On mount: restore from sessionStorage, then verify with server
@@ -51,6 +53,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setImpersonatedBy(null);
         sessionStorage.removeItem(USER_KEY);
         sessionStorage.removeItem(IMPERSONATED_BY_KEY);
+      })
+      .finally(() => {
+        setIsLoading(false);
       });
   }, []);
 
@@ -114,7 +119,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [router]);
 
   return (
-    <AuthContext.Provider value={{ user, isAuthenticated: !!user, impersonatedBy, login, logout, impersonate, exitImpersonation }}>
+    <AuthContext.Provider value={{ user, isAuthenticated: !!user, isLoading, impersonatedBy, login, logout, impersonate, exitImpersonation }}>
       {children}
     </AuthContext.Provider>
   );

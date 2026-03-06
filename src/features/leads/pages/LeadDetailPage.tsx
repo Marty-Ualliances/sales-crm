@@ -3,7 +3,7 @@ import { usePathname, useParams } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, Phone, Mail, User, Calendar, FileText, RefreshCw, Loader2, Building2, MapPin, Globe, Linkedin, Users, CheckCircle, PhoneCall, Send, ShieldCheck, AlertTriangle, Tag, Plus, Pencil, Trash2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { useLead, useCalls, useCompleteFollowUp, useUpdateLead, useLeads, useCreateCall, useMeetings, useCreateMeeting, useUpdateMeeting, useAgents } from '@/hooks/useApi';
+import { useLead, useCalls, useCompleteFollowUp, useUpdateLead, useLeads, useCreateCall, useUpdateCall, useMeetings, useCreateMeeting, useUpdateMeeting, useAgents } from '@/hooks/useApi';
 import { useLeadActivities, useCreateActivity } from '@/features/activities/hooks/useActivities';
 import { usePipelineStages, useUpdateLeadStage } from '@/features/pipeline/hooks/usePipeline';
 import { useAuth } from '@/features/auth/context/AuthContext';
@@ -17,6 +17,7 @@ import { MeetingCompletedModal } from '@/features/meetings/components/MeetingCom
 import { EmployeeForm } from '@/features/leads/components/EmployeeForm';
 import { ActiveAccountModal, ActiveAccountData } from '@/features/leads/components/ActiveAccountModal';
 import { ContactPickerModal } from '@/components/common/ContactPickerModal';
+import { CallNotesModal } from '@/features/calls/components/CallNotesModal';
 
 /** Strips non-digit chars (keeps leading +) for tel: URI */
 function toTelUri(phone: string): string {
@@ -59,6 +60,7 @@ export default function LeadDetailPage() {
   const completeFollowUp = useCompleteFollowUp();
   const updateLead = useUpdateLead();
   const createCall = useCreateCall();
+  const updateCallMutation = useUpdateCall();
   const { user } = useAuth();
   const { data: allLeads = [] } = useLeads();
   const { data: meetings = [] } = useMeetings();
@@ -81,6 +83,7 @@ export default function LeadDetailPage() {
   const [editingEmployeeIdx, setEditingEmployeeIdx] = useState<number | undefined>(undefined);
   const [isEditingLeadInfo, setIsEditingLeadInfo] = useState(false);
   const [showContactPicker, setShowContactPicker] = useState(false);
+  const [callNotesState, setCallNotesState] = useState<{ open: boolean; callId: string }>({ open: false, callId: '' });
   const [leadInfoForm, setLeadInfoForm] = useState({
     name: '',
     title: '',
@@ -137,7 +140,7 @@ export default function LeadDetailPage() {
     }
 
     try {
-      await createCall.mutateAsync({
+      const result = await createCall.mutateAsync({
         leadId: lead.id || lead._id,
         leadName: lead.name,
         agentName: user?.name || 'Unknown',
@@ -148,6 +151,10 @@ export default function LeadDetailPage() {
         notes: 'Call initiated from Lead Details',
         hasRecording: false,
       });
+      const callId = result?.id || result?._id || result?.data?.id || result?.data?._id;
+      if (callId) {
+        setCallNotesState({ open: true, callId });
+      }
     } catch (error) {
       console.error('Failed to log call:', error);
     }
@@ -155,6 +162,17 @@ export default function LeadDetailPage() {
     // Open the system dialer
     window.location.href = toTelUri(phoneNumber);
     toast.success('Call logged and opening dialer...');
+  };
+
+  const handleSaveCallNotes = async (notes: string) => {
+    try {
+      await updateCallMutation.mutateAsync({ id: callNotesState.callId, data: { notes } });
+      toast.success('Call notes saved');
+    } catch {
+      toast.error('Failed to save call notes');
+    } finally {
+      setCallNotesState({ open: false, callId: '' });
+    }
   };
 
   const handleCompleteFollowUp = async () => {
@@ -1028,6 +1046,13 @@ export default function LeadDetailPage() {
         open={showContactPicker}
         onClose={() => setShowContactPicker(false)}
         onCall={(phone) => handleCall(phone)}
+      />
+      <CallNotesModal
+        open={callNotesState.open}
+        leadName={lead.name}
+        callId={callNotesState.callId}
+        onSave={handleSaveCallNotes}
+        onClose={() => setCallNotesState({ open: false, callId: '' })}
       />
     </>
   );

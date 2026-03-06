@@ -97,7 +97,7 @@ router.post('/', auth, async (req: AuthRequest, res: Response) => {
     if (data.leadId) {
       const Lead = (await import('../models/Lead')).default;
       const lead = await Lead.findById(data.leadId);
-      if (lead && ['Meeting Completed', 'Negotiation', 'Closed Won'].includes(lead.status)) {
+      if (lead && ['Meeting Completed', 'Negotiation', 'Closed Won', 'Active Account'].includes(lead.status)) {
         data.recordingFlagged = true;
       }
     }
@@ -111,6 +111,10 @@ router.post('/', auth, async (req: AuthRequest, res: Response) => {
       const Activity = (await import('../models/Activity')).default;
       const lead = await Lead.findById(data.leadId);
       if (lead) {
+        // Promote status to 'Contacted' if the lead is still 'New Lead' or 'In Progress'
+        if (lead.status === 'New Lead' || lead.status === 'In Progress') {
+          lead.status = 'Contacted' as any;
+        }
         lead.set('updatedAt', new Date());
         await lead.save();
 
@@ -122,6 +126,17 @@ router.post('/', auth, async (req: AuthRequest, res: Response) => {
           callOutcome: data.status === 'Completed' ? 'connected' : 'no_answer',
           description: data.notes || 'Call logged',
         });
+
+        // Emit real-time update so dashboards refresh immediately
+        try {
+          const { emitLeadChangedToRoles } = await import('../socket');
+          emitLeadChangedToRoles('updated', {
+            leadId: lead._id.toString(),
+            assignedUserId: lead.assignedTo?.toString(),
+          });
+        } catch {
+          // socket not critical
+        }
       }
     }
 

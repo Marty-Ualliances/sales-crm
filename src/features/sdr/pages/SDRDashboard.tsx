@@ -1,10 +1,10 @@
 'use client';
-import { Users, Phone, AlertTriangle, Clock, CheckCircle, Loader2, ArrowRight } from 'lucide-react';
+import { Users, Phone, AlertTriangle, CalendarCheck, CheckCircle, Loader2, ArrowRight } from 'lucide-react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/button';
 import KPICard from '@/components/common/KPICard';
 import LeadTable from '@/components/common/LeadTable';
-import { useLeads } from '@/hooks/useApi';
+import { useLeads, useCalls } from '@/hooks/useApi';
 import { useMyTasks } from '@/features/activities/hooks/useActivities';
 import { toast } from 'sonner';
 import { useAuth } from '@/features/auth/context/AuthContext';
@@ -17,6 +17,7 @@ export default function SDRDashboard() {
   const { user } = useAuth();
   const { data: leads = [], isLoading: leadsLoading } = useLeads();
   const { data: tasks = [], isLoading: tasksLoading } = useMyTasks();
+  const { data: allCalls = [] } = useCalls();
 
   const [dateRange, setDateRange] = useState<DateRange>('last7days');
   const [isActiveAccountsModalOpen, setIsActiveAccountsModalOpen] = useState(false);
@@ -28,11 +29,15 @@ export default function SDRDashboard() {
   const pendingTasks = tasks.filter(t => !t.isCompleted);
   const overdueTasks = pendingTasks.filter(t => t.dueDate && new Date(t.dueDate) < today);
 
-  const newLeadsCount = filteredLeads.filter((l: any) => l.pipelineStage?.name === 'New' || l.status === 'New Lead').length;
-  const contactedLeadsCount = filteredLeads.filter((l: any) => l.pipelineStage?.name === 'Contacted').length;
-  const wonLeadsCount = filteredLeads.filter((l: any) => l.pipelineStage?.name === 'Won' || l.status === 'Closed Won').length;
+  const newLeadsCount = filteredLeads.filter((l: any) => l.status === 'New Lead').length;
+  const inProgressCount = filteredLeads.filter((l: any) => l.status === 'In Progress').length;
+  const contactedLeadsCount = filteredLeads.filter((l: any) => l.status === 'Contacted').length;
+  const appointmentSetCount = filteredLeads.filter((l: any) => l.status === 'Appointment Set').length;
+  const activeAccountCount = filteredLeads.filter((l: any) => l.status === 'Active Account').length;
+  const callsMadeCount = allCalls.length;
 
-  if (leadsLoading || tasksLoading) {
+  const isLoadingAll = leadsLoading || tasksLoading;
+  if (isLoadingAll) {
     return (
       <div className="flex items-center justify-center py-20">
         <Loader2 className="h-8 w-8 animate-spin text-primary" />
@@ -52,18 +57,21 @@ export default function SDRDashboard() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
         <div className="animate-slide-up stagger-1">
-          <KPICard title="New Leads" value={newLeadsCount} icon={Users} link="/sdr/leads" />
+          <KPICard title="New Leads" value={newLeadsCount + inProgressCount} icon={Users} link="/sdr/leads" />
         </div>
         <div className="animate-slide-up stagger-2">
-          <KPICard title="Contacted" value={contactedLeadsCount} icon={Phone} link="/sdr/leads" />
+          <KPICard title="Calls Made" value={callsMadeCount} icon={Phone} link="/sdr/calls" />
         </div>
         <div className="animate-slide-up stagger-3">
-          <KPICard title="Pending Tasks" value={pendingTasks.length} icon={AlertTriangle} link="/sdr/leads" />
+          <KPICard title="Contacted" value={contactedLeadsCount} icon={CalendarCheck} link="/sdr/leads" />
         </div>
         <div className="animate-slide-up stagger-4">
-          <KPICard title="Active Accounts" value={wonLeadsCount} icon={CheckCircle} onClick={() => setIsActiveAccountsModalOpen(true)} />
+          <KPICard title="Appointment Set" value={appointmentSetCount} icon={AlertTriangle} link="/sdr/leads" />
+        </div>
+        <div className="animate-slide-up stagger-5">
+          <KPICard title="Active Accounts" value={activeAccountCount} icon={CheckCircle} onClick={() => setIsActiveAccountsModalOpen(true)} />
         </div>
       </div>
 

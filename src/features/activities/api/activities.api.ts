@@ -34,3 +34,7 @@ export const completeActivity = async (id: string, updates: Partial<Activity>) =
 export const createActivity = async (payload: Partial<Activity>) => {
     return request<Activity>('/activities', { method: 'POST', body: JSON.stringify(payload) });
 };
+
+export const getActivityFeed = async () => {
+    return request<Activity[]>('/activities/feed');
+};

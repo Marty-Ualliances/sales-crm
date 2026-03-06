@@ -33,16 +33,16 @@ export function disconnectSocket() {
 
 /**
  * useSocket — connects to Socket.IO and invalidates React Query caches
- * when lead data changes on the server. Call this once per layout component.
+ * when lead data changes on the server. Debounced to max 1× per 500ms.
  */
 export function useSocket() {
   const qc = useQueryClient();
-  const handlerRef = useRef<() => void>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const socket = getSocket();
 
-    handlerRef.current = () => {
+    const invalidateAll = () => {
       qc.invalidateQueries({ queryKey: ['leads'] });
       qc.invalidateQueries({ queryKey: ['kpis'] });
       qc.invalidateQueries({ queryKey: ['hr-leads'] });
@@ -55,11 +55,21 @@ export function useSocket() {
       qc.invalidateQueries({ queryKey: ['lead-activities'] });
     };
 
-    socket.on('lead:changed', handlerRef.current);
+    const debouncedHandler = () => {
+      if (timerRef.current) return; // already scheduled
+      timerRef.current = setTimeout(() => {
+        timerRef.current = null;
+        invalidateAll();
+      }, 500);
+    };
+
+    socket.on('lead:changed', debouncedHandler);
 
     return () => {
-      if (handlerRef.current) {
-        socket.off('lead:changed', handlerRef.current);
+      socket.off('lead:changed', debouncedHandler);
+      if (timerRef.current) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
       }
     };
   }, [qc]);

@@ -22,10 +22,9 @@ function StatCard({ label, value, sub, icon: Icon, accent }: { label: string; va
 }
 
 export default function FunnelDashboardPage() {
-  const { data: funnel, isLoading } = useFunnel();
-  const { data: kpis } = useKPIs();
-
   const [dateRange, setDateRange] = useState<DateRange>('last7days');
+  const { data: funnel, isLoading } = useFunnel({ dateRange });
+  const { data: kpis } = useKPIs();
 
   if (isLoading) {
     return (

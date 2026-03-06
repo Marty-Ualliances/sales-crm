@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getMyTasks, getLeadActivities, completeActivity, createActivity } from '../api/activities.api';
+import { getMyTasks, getLeadActivities, completeActivity, createActivity, getActivityFeed } from '../api/activities.api';
 
 export const useMyTasks = () => {
     return useQuery({
@@ -35,5 +35,13 @@ export const useCreateActivity = () => {
             qc.invalidateQueries({ queryKey: ['my-tasks'] });
             qc.invalidateQueries({ queryKey: ['activities'] });
         },
+    });
+};
+
+export const useActivityFeed = () => {
+    return useQuery({
+        queryKey: ['activity-feed'],
+        queryFn: getActivityFeed,
+        staleTime: 30_000,
     });
 };

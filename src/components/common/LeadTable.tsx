@@ -8,11 +8,12 @@ import { Phone, Edit, CheckCircle, ChevronDown } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { Lead } from '@/features/leads/types/leads';
-import { useCompleteFollowUp, useCreateCall } from '@/hooks/useApi';
+import { useCompleteFollowUp, useCreateCall, useUpdateCall } from '@/hooks/useApi';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { toast } from 'sonner';
 import { getPriorityBadgeClass, getStageBadgeClass } from '@/features/leads/constants/pipeline';
 import { ContactPickerModal } from '@/components/common/ContactPickerModal';
+import { CallNotesModal } from '@/features/calls/components/CallNotesModal';
 
 function toTelUri(phone: string): string {
   return `tel:${phone.replace(/[^+\d]/g, '')}`;
@@ -47,13 +48,15 @@ export default function LeadTable({
 
   const completeFollowUp = useCompleteFollowUp();
   const createCall = useCreateCall();
+  const updateCall = useUpdateCall();
   const { user } = useAuth();
   const [contactPickerLead, setContactPickerLead] = useState<Lead | null>(null);
+  const [callNotesState, setCallNotesState] = useState<{ open: boolean; leadName: string; callId: string }>({ open: false, leadName: '', callId: '' });
 
   const handleLogCall = async (lead: Lead, note: string) => {
     try {
       const now = new Date();
-      await createCall.mutateAsync({
+      const result = await createCall.mutateAsync({
         leadId: lead.id,
         leadName: lead.name,
         agentName: user?.name || 'Unknown Agent',
@@ -63,9 +66,24 @@ export default function LeadTable({
         status: 'Completed',
         notes: note,
       });
-      toast.success(`Call logged for ${lead.name}: ${note}`);
+      toast.success(`Call logged for ${lead.name}`);
+      // Show call notes popup
+      const callId = result?.id || result?._id || '';
+      if (callId) {
+        setCallNotesState({ open: true, leadName: lead.name, callId });
+      }
     } catch {
       toast.error('Failed to log call');
+    }
+  };
+
+  const handleSaveCallNotes = async (notes: string) => {
+    if (!callNotesState.callId || !notes.trim()) return;
+    try {
+      await updateCall.mutateAsync({ id: callNotesState.callId, data: { notes } });
+      toast.success('Call notes saved');
+    } catch {
+      toast.error('Failed to save call notes');
     }
   };
 
@@ -245,6 +263,14 @@ export default function LeadTable({
           }}
         />
       )}
+
+      <CallNotesModal
+        open={callNotesState.open}
+        leadName={callNotesState.leadName}
+        callId={callNotesState.callId}
+        onSave={handleSaveCallNotes}
+        onClose={() => setCallNotesState({ open: false, leadName: '', callId: '' })}
+      />
     </div>
   );
 }

@@ -26,10 +26,10 @@ export function useKPIs() {
     });
 }
 
-export function useFunnel() {
+export function useFunnel(params?: { dateRange?: string }) {
     return useQuery({
-        queryKey: ['funnel'],
-        queryFn: () => api.leads.funnel(),
+        queryKey: ['funnel', params],
+        queryFn: () => api.leads.funnel(params),
         staleTime: 60_000,
     });
 }

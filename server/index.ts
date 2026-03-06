@@ -131,7 +131,14 @@ function deepSanitizeHtml(obj: any): any {
 
 app.use((req: Request, _res: Response, nextMiddleware: NextFunction) => {
   if (req.body) req.body = deepSanitizeHtml(req.body);
-  if (req.query) req.query = deepSanitizeHtml(req.query as Record<string, unknown>);
+  // Express 5: req.query is a getter — shadow it with a data property
+  if (req.query) {
+    Object.defineProperty(req, 'query', {
+      value: deepSanitizeHtml(req.query as Record<string, unknown>),
+      writable: true,
+      configurable: true,
+    });
+  }
   if (req.params) req.params = deepSanitizeHtml(req.params);
   nextMiddleware();
 });
@@ -266,6 +273,16 @@ async function autoSeedPipelineStages() {
         console.log(`[SEED] ✅ Assigned default stage "${defaultStage.name}" to ${result.modifiedCount} lead(s) missing pipelineStage.`);
       }
     }
+
+    // Normalize legacy "CSV Import" source values → "csv_upload"
+    const Lead = (await import('./models/Lead.js')).default;
+    const sourceFixResult = await Lead.updateMany(
+      { source: { $nin: ['csv_upload', 'manual', 'website', 'referral', 'linkedin', 'other'] } },
+      { $set: { source: 'csv_upload' } }
+    );
+    if (sourceFixResult.modifiedCount > 0) {
+      console.log(`[SEED] ✅ Normalized ${sourceFixResult.modifiedCount} lead(s) with invalid source values to "csv_upload".`);
+    }
   } catch (err) {
     console.error('[SEED] ❌ Pipeline stage seed failed:', err);
   }
@@ -280,8 +297,12 @@ async function autoSeedAdmin() {
     }
     console.log('[SEED] No users found — creating default admin user…');
 
-    const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'chiren@1100';
-    const teamPassword = process.env.SEED_TEAM_PASSWORD || 'Team2026!';
+    const adminPassword = process.env.SEED_ADMIN_PASSWORD;
+    const teamPassword = process.env.SEED_TEAM_PASSWORD;
+    if (!adminPassword || !teamPassword) {
+      console.log('[SEED] SEED_ADMIN_PASSWORD or SEED_TEAM_PASSWORD not set — skipping auto-seed.');
+      return;
+    }
 
     await User.create([
       { name: 'Chiren', email: 'chiren@ualliances.com', password: adminPassword, avatar: 'CH', role: 'admin' },
@@ -319,7 +340,12 @@ httpServer.listen(Number(PORT), '0.0.0.0', () => {
       await autoSeedPipelineStages();
     })
     .catch((err) => {
-      console.error('❌ MONGODB CONNECTION ERROR:', err.message);
+      console.error('❌ MONGODB CONNECTION ERROR: Failed to connect to database.');
+      if (!isProduction) {
+        // In development, we can log a bit more detail without being as risky, 
+        // but still avoid the full URI if it contains credentials.
+        console.error(`[DEV ERROR] ${err.message.replace(/\/\/.*:.*@/, '//****:****@')}`);
+      }
       // We don't exit(1) immediately to allow Railway to see logs and display 503 instead of immediate 502s
     });
 });

@@ -22,10 +22,14 @@ export function ThemeToggle() {
             variant="ghost"
             size="icon"
             onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-            className="rounded-full text-muted-foreground hover:bg-secondary w-9 h-9"
+            className="rounded-full text-muted-foreground hover:bg-secondary w-9 h-9 transition-transform duration-300 hover:rotate-12"
             title="Toggle theme"
         >
-            {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            {theme === 'dark' ? (
+                <Sun className="h-5 w-5 transition-transform duration-300 rotate-0 scale-100" />
+            ) : (
+                <Moon className="h-5 w-5 transition-transform duration-300 rotate-0 scale-100" />
+            )}
         </Button>
     );
 }

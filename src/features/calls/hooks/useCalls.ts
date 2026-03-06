@@ -25,6 +25,8 @@ export function useCreateCall() {
         onSuccess: () => {
             qc.invalidateQueries({ queryKey: ['calls'] });
             qc.invalidateQueries({ queryKey: ['leads'] });
+            qc.invalidateQueries({ queryKey: ['agents'] });
+            qc.invalidateQueries({ queryKey: ['kpis'] });
         },
     });
 }

@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Loader2, Download, DollarSign, GripVertical } from 'lucide-react';
 import * as XLSX from 'xlsx';
-import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useDroppable, useDraggable } from '@dnd-kit/core';
+import { DndContext, DragEndEvent, DragOverlay, DragStartEvent, useDroppable, useDraggable, PointerSensor, TouchSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { format } from 'date-fns';
 
 function KanbanCard({ lead }: { lead: any }) {
@@ -18,14 +18,12 @@ function KanbanCard({ lead }: { lead: any }) {
   return (
     <div
       ref={setNodeRef}
+      {...listeners}
+      {...attributes}
       style={{ opacity: isDragging ? 0.5 : 1 }}
-      className="relative rounded-lg border border-border bg-card p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing group min-h-[100px]"
+      className="relative rounded-lg border border-border bg-card p-3 shadow-sm hover:shadow-md transition-shadow cursor-grab active:cursor-grabbing group min-h-[100px] touch-none"
     >
-      <div
-        {...listeners}
-        {...attributes}
-        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 hover:bg-secondary rounded"
-      >
+      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1">
         <GripVertical className="h-4 w-4 text-muted-foreground" />
       </div>
 
@@ -100,6 +98,10 @@ export default function PipelinePage() {
   const { data: board = [], isLoading } = usePipelineBoard();
   const updateStageMutation = useUpdateLeadStage();
   const [activeLead, setActiveLead] = useState<any>(null);
+
+  const pointerSensor = useSensor(PointerSensor, { activationConstraint: { distance: 5 } });
+  const touchSensor = useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } });
+  const sensors = useSensors(pointerSensor, touchSensor);
 
   if (isLoading) {
     return (
@@ -180,7 +182,7 @@ export default function PipelinePage() {
             No pipeline stages found. Run `npm run seed:stages` or refresh after server auto-seeding.
           </div>
         )}
-        <DndContext onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+        <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
           <div className="flex gap-4 h-full min-h-[500px]">
             {board.map((col) => (
               <KanbanColumn key={col._id} col={col} />

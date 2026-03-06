@@ -4,6 +4,7 @@ import { Calendar, Plus, Trash2, Edit2, Loader2, Clock, User, Link2, X, CheckCir
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useMeetings, useCreateMeeting, useDeleteMeeting, useUpdateMeeting, useLeads } from '@/hooks/useApi';
+import { toast } from 'sonner';
 
 type MeetingFormData = {
     title: string;
@@ -75,14 +76,20 @@ export default function MeetingsPage() {
             leadName = lead?.name || '';
         }
         const payload = { ...form, leadName };
-        if (editId) {
-            await updateMeeting.mutateAsync({ id: editId, data: payload });
-        } else {
-            await createMeeting.mutateAsync(payload);
+        try {
+            if (editId) {
+                await updateMeeting.mutateAsync({ id: editId, data: payload });
+                toast.success('Meeting updated');
+            } else {
+                await createMeeting.mutateAsync(payload);
+                toast.success('Meeting created');
+            }
+            setForm({ ...emptyForm });
+            setShowForm(false);
+            setEditId(null);
+        } catch (err: any) {
+            toast.error(err.message || 'Failed to save meeting');
         }
-        setForm({ ...emptyForm });
-        setShowForm(false);
-        setEditId(null);
     };
 
     const handleEdit = (meeting: any) => {
@@ -107,12 +114,22 @@ export default function MeetingsPage() {
 
     const handleDelete = async (id: string) => {
         if (confirm('Delete this meeting?')) {
-            await deleteMeeting.mutateAsync(id);
+            try {
+                await deleteMeeting.mutateAsync(id);
+                toast.success('Meeting deleted');
+            } catch (err: any) {
+                toast.error(err.message || 'Failed to delete meeting');
+            }
         }
     };
 
     const handleStatusChange = async (id: string, status: string) => {
-        await updateMeeting.mutateAsync({ id, data: { status } });
+        try {
+            await updateMeeting.mutateAsync({ id, data: { status } });
+            toast.success(`Meeting marked as ${status}`);
+        } catch (err: any) {
+            toast.error(err.message || 'Failed to update status');
+        }
     };
 
     if (isLoading) {

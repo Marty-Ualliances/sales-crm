@@ -61,7 +61,7 @@ export default function CSVUploadPage() {
   const previewMutation = useImportPreview();
   const importMutation = useImportCSV();
 
-  const handleFile = async (f: File) => {
+  const handleFile = useCallback(async (f: File) => {
     setFile(f);
     try {
       const res = await previewMutation.mutateAsync(f);
@@ -79,7 +79,7 @@ export default function CSVUploadPage() {
       toast.error(err.message || 'Failed to parse file');
       setFile(null);
     }
-  };
+  }, [previewMutation]);
 
   const handleMappingConfirm = () => {
     setStep('preview');
@@ -111,7 +111,7 @@ export default function CSVUploadPage() {
     setDragOver(false);
     const f = e.dataTransfer.files[0];
     if (f && isAcceptedFile(f)) handleFile(f);
-  }, []);
+  }, [handleFile]);
 
   const downloadTemplate = () => {
     const csv = VALID_CRM_FIELDS.map(f => f.label).join(',') + '\n';
@@ -254,7 +254,7 @@ export default function CSVUploadPage() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-muted/30 text-muted-foreground text-[11px] uppercase tracking-wider">
-                    <th className="px-5 py-3 text-left font-medium">Spreadshet Column</th>
+                    <th className="px-5 py-3 text-left font-medium">Spreadsheet Column</th>
                     <th className="px-5 py-3 text-left font-medium">Maps to CRM Field</th>
                     <th className="px-5 py-3 text-left font-medium hidden sm:table-cell">Sample Value</th>
                   </tr>

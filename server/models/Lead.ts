@@ -1,6 +1,15 @@
 import mongoose, { Schema, Document } from 'mongoose';
 
-export type LeadStatus = 'new' | 'contacted' | 'qualified' | 'proposal' | 'negotiation' | 'won' | 'lost';
+export type LeadStatus = 'New Lead' | 'In Progress' | 'Contacted' | 'Appointment Set' | 'Active Account';
+
+/** Ordered status values for regression prevention */
+export const STATUS_ORDER: Record<LeadStatus, number> = {
+  'New Lead': 1,
+  'In Progress': 2,
+  'Contacted': 3,
+  'Appointment Set': 4,
+  'Active Account': 5,
+};
 
 export type LeadSource = 'csv_upload' | 'manual' | 'website' | 'referral' | 'linkedin' | 'other';
 
@@ -79,8 +88,8 @@ const LeadSchema = new Schema<ILead>(
     assignedAt: { type: Date, default: null },
     status: {
       type: String,
-      enum: ['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost'],
-      default: 'new',
+      enum: ['New Lead', 'In Progress', 'Contacted', 'Appointment Set', 'Active Account'],
+      default: 'New Lead',
     },
     pipelineStage: { type: Schema.Types.ObjectId, ref: 'PipelineStage', default: null },
     dealValue: { type: Number, default: 0 },
@@ -147,6 +156,19 @@ LeadSchema.index({ isDeleted: 1, createdAt: -1 });
 // Text index for search queries
 LeadSchema.index({ firstName: 'text', lastName: 'text', email: 'text', company: 'text' });
 
+// ── Normalize legacy source values before validation ──
+const SOURCE_ALIAS: Record<string, LeadSource> = {
+  'CSV Import': 'csv_upload',
+  'csv import': 'csv_upload',
+  'Csv Import': 'csv_upload',
+};
+
+LeadSchema.pre('validate', function () {
+  if (this.source && SOURCE_ALIAS[this.source as string]) {
+    this.source = SOURCE_ALIAS[this.source as string];
+  }
+});
+
 // ── Virtual: fullName ──
 LeadSchema.virtual('fullName').get(function () {
   return `${this.firstName || ''} ${this.lastName || ''}`.trim();
@@ -172,6 +194,11 @@ LeadSchema.set('toJSON', {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   transform: (_doc: any, ret: any) => {
     ret.id = ret._id?.toString();
+    // Map backend field names to frontend-expected names
+    ret.name = ret.fullName || `${ret.firstName || ''} ${ret.lastName || ''}`.trim();
+    ret.companyName = ret.company || '';
+    ret.addedBy = ret.uploadedBy?.name || '';
+    ret.assignedAgent = ret.assignedTo?.name || '';
     // Derive primary phone from first available phone field
     if (!ret.phone) {
       ret.phone = ret.workDirectPhone || ret.mobilePhone || ret.homePhone

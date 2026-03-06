@@ -33,9 +33,10 @@ router.get('/dashboard', authenticateToken, checkPermission('analytics', 'view_a
     const leadFilter = { isDeleted: false, ...dateFilter };
 
     const totalLeads = await Lead.countDocuments(leadFilter);
-    const closedLeads = await Lead.countDocuments({ ...leadFilter, status: 'won' });
-    const lostLeads = await Lead.countDocuments({ ...leadFilter, status: 'lost' });
-    const activeLeads = totalLeads - closedLeads - lostLeads;
+    const closedLeads = await Lead.countDocuments({ ...leadFilter, status: 'Active Account' });
+    const appointmentSetLeads = await Lead.countDocuments({ ...leadFilter, status: 'Appointment Set' });
+    const lostLeads = 0; // No 'lost' status in new pipeline
+    const activeLeads = totalLeads - closedLeads;
     const totalCalls = await Activity.countDocuments({ type: 'call', ...dateFilter });
 
     // SDRs and Closers performance
@@ -56,7 +57,7 @@ router.get('/dashboard', authenticateToken, checkPermission('analytics', 'view_a
         { $group: { _id: '$assignedTo', count: { $sum: 1 } } },
       ]),
       Lead.aggregate([
-        { $match: { assignedTo: { $in: agentIds }, isDeleted: false, status: 'won', ...dateFilter } },
+        { $match: { assignedTo: { $in: agentIds }, isDeleted: false, status: 'Active Account', ...dateFilter } },
         { $group: { _id: '$assignedTo', count: { $sum: 1 } } },
       ]),
     ]);
@@ -82,6 +83,7 @@ router.get('/dashboard', authenticateToken, checkPermission('analytics', 'view_a
     res.json({
       totalLeads,
       closedLeads,
+      appointmentSetLeads,
       lostLeads,
       activeLeads,
       totalCalls,
@@ -177,7 +179,7 @@ router.get('/closed-leads', authenticateToken, checkPermission('analytics', 'vie
     const { search, agent } = req.query;
     const filter: Record<string, any> = {
       isDeleted: false,
-      status: { $in: ['won', 'lost'] }
+      status: { $in: ['Active Account'] }
     };
 
     if (agent) {

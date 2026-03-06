@@ -1,6 +1,6 @@
 'use client';
 import Link from 'next/link';
-import { Users, FileSpreadsheet, UserCheck, UserX, TrendingUp, Upload } from 'lucide-react';
+import { Users, FileSpreadsheet, UserCheck, UserX, TrendingUp, Upload, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import KPICard from '@/components/common/KPICard';
 import { useLeads, useAgents } from '@/hooks/useApi';
@@ -16,8 +16,16 @@ export default function LeadGenDashboard() {
 
   const [dateRange, setDateRange] = useState<DateRange>('last7days');
   const [isActiveAccountsModalOpen, setIsActiveAccountsModalOpen] = useState(false);
-  const leads = user?.role === 'admin' ? allLeads : allLeads.filter((l: any) => l.addedBy === user?.name);
+  const leads = allLeads; // Already filtered server-side for lead_gen role
   const filteredLeads = filterByDateRange(leads, dateRange);
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   const sdrs = agents.filter((a: any) => a.role === 'sdr');
   const totalLeads = leads.length;
@@ -74,16 +82,16 @@ export default function LeadGenDashboard() {
           <KPICard title="New Leads" value={filteredLeads.filter((l: any) => l.status === 'New Lead').length} icon={Users} link="/leadgen/leads" />
         </div>
         <div className="animate-slide-up stagger-2">
-          <KPICard title="In Progress" value={filteredLeads.filter((l: any) => l.status === 'Working').length} icon={TrendingUp} link="/leadgen/leads" />
+          <KPICard title="In Progress" value={filteredLeads.filter((l: any) => l.status === 'In Progress').length} icon={TrendingUp} link="/leadgen/leads" />
         </div>
         <div className="animate-slide-up stagger-3">
           <KPICard title="Contacted" value={filteredLeads.filter((l: any) => l.status === 'Contacted').length} icon={UserCheck} link="/leadgen/leads" />
         </div>
         <div className="animate-slide-up stagger-4">
-          <KPICard title="Appointment Setter" value={filteredLeads.filter((l: any) => l.status === 'Meeting Booked').length} icon={UserCheck} link="/leadgen/leads" />
+          <KPICard title="Appointment Set" value={filteredLeads.filter((l: any) => l.status === 'Appointment Set').length} icon={UserCheck} link="/leadgen/leads" />
         </div>
         <div className="animate-slide-up stagger-5">
-          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Closed Won').length} icon={UserCheck} onClick={() => setIsActiveAccountsModalOpen(true)} />
+          <KPICard title="Active Accounts" value={filteredLeads.filter((l: any) => l.status === 'Active Account').length} icon={UserCheck} onClick={() => setIsActiveAccountsModalOpen(true)} />
         </div>
       </div>
 
@@ -136,8 +144,8 @@ export default function LeadGenDashboard() {
                   </div>
                   <div className="text-right">
                     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${lead.status === 'New Lead' ? 'bg-blue-100 text-blue-700' :
-                      lead.status === 'Working' ? 'bg-yellow-100 text-yellow-700' :
-                        lead.status === 'Closed Won' ? 'bg-green-100 text-green-700' :
+                      lead.status === 'In Progress' ? 'bg-yellow-100 text-yellow-700' :
+                        lead.status === 'Active Account' ? 'bg-green-100 text-green-700' :
                           'bg-gray-100 text-gray-700'
                       }`}>{lead.status}</span>
                     <p className="text-xs text-muted-foreground mt-0.5">{lead.assignedAgent || 'Unassigned'}</p>

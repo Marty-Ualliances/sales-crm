@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { Plus, Trash2, Edit2, Save, X, StickyNote, Loader2, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useNotes, useCreateNote, useUpdateNote, useDeleteNote } from '@/hooks/useApi';
-import { useToast } from '@/hooks/use-toast';
+import { toast } from 'sonner';
 import { useAuth } from '@/features/auth/context/AuthContext';
 
 export default function NotesPage() {
@@ -12,7 +12,6 @@ export default function NotesPage() {
   const createNote = useCreateNote();
   const updateNote = useUpdateNote();
   const deleteNote = useDeleteNote();
-  const { toast } = useToast();
 
   const [newContent, setNewContent] = useState('');
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -23,9 +22,9 @@ export default function NotesPage() {
     try {
       await createNote.mutateAsync(newContent.trim());
       setNewContent('');
-      toast({ title: 'Note saved' });
+      toast.success('Note saved');
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+      toast.error(err.message || 'Failed to save note');
     }
   };
 
@@ -34,18 +33,18 @@ export default function NotesPage() {
     try {
       await updateNote.mutateAsync({ id, content: editContent.trim() });
       setEditingId(null);
-      toast({ title: 'Note updated' });
+      toast.success('Note updated');
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+      toast.error(err.message || 'Failed to update note');
     }
   };
 
   const handleDelete = async (id: string) => {
     try {
       await deleteNote.mutateAsync(id);
-      toast({ title: 'Note deleted' });
+      toast.success('Note deleted');
     } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'destructive' });
+      toast.error(err.message || 'Failed to delete note');
     }
   };
 

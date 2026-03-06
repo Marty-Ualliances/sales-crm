@@ -1,6 +1,5 @@
 import type { Metadata } from 'next';
 import { Providers } from './providers';
-import { Toaster } from '@/components/ui/toaster';
 import { Toaster as Sonner } from '@/components/ui/sonner';
 import '@/index.css';
 
@@ -24,7 +23,6 @@ export default function RootLayout({
             <body className="antialiased min-h-screen font-sans">
                 <Providers>
                     {children}
-                    <Toaster />
                     <Sonner />
                 </Providers>
             </body>

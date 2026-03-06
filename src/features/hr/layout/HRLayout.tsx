@@ -3,12 +3,14 @@ import { useRouter, usePathname } from 'next/navigation';
 import { ReactNode, useEffect, useState } from 'react';
 import Link from 'next/link';
 import {
-  ClipboardCheck, Home, LogOut, Menu, StickyNote, Users, X, Zap, FileText,
+  ClipboardCheck, Home, LogOut, Menu, StickyNote, Users, X, FileText,
 } from 'lucide-react';
 import { useAuth } from '@/features/auth/context/AuthContext';
 import { useSocket } from '@/hooks/useSocket';
 import { useRole } from '@/hooks/useRole';
+import { useNotifications } from '@/hooks/useApi';
 import { ThemeToggle } from '@/components/common/ThemeToggle';
+import NotificationDropdown from '@/components/common/NotificationDropdown';
 
 const hrNavItems = [
   { icon: Home, label: 'Dashboard', path: '/hr' },
@@ -27,16 +29,6 @@ const ROLE_REDIRECT: Record<string, string> = {
   leadgen: '/leadgen',
 };
 
-const ROLE_COLORS: Record<string, string> = {
-  admin: 'bg-primary text-primary-foreground',
-  manager: 'bg-orange-500 text-white',
-  sdr: 'bg-blue-500 text-white',
-  closer: 'bg-teal-500 text-white',
-  hr: 'bg-emerald-500 text-white',
-  lead_gen: 'bg-amber-500 text-white',
-  leadgen: 'bg-amber-500 text-white',
-};
-
 
 export default function HRLayout({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? '';
@@ -46,6 +38,8 @@ export default function HRLayout({ children }: { children: ReactNode }) {
   useSocket();
 
   const { isHR, isAdmin } = useRole();
+  const { data: notifications = [] } = useNotifications();
+  const unreadCount = notifications.filter((n: any) => !n.read).length;
 
   useEffect(() => {
     if (!user) {
@@ -146,6 +140,7 @@ export default function HRLayout({ children }: { children: ReactNode }) {
               </button>
             )}
             <ThemeToggle />
+            <NotificationDropdown notifications={notifications} unreadCount={unreadCount} />
             <div className="flex items-center gap-2">
               <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-emerald-500 to-emerald-600 text-white text-sm font-medium ring-2 ring-emerald-500/20">
                 {user?.avatar || 'HR'}

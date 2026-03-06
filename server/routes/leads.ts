@@ -1,7 +1,8 @@
 import { Router, Response } from 'express';
 import mongoose from 'mongoose';
 import multer from 'multer';
-import Lead from '../models/Lead.js';
+import Lead, { STATUS_ORDER } from '../models/Lead.js';
+import type { LeadStatus } from '../models/Lead.js';
 import Activity from '../models/Activity.js';
 import PipelineStage from '../models/PipelineStage.js';
 import User from '../models/User.js';
@@ -73,7 +74,7 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
 
     const filter: Record<string, any> = {};
 
-    // Role-based visibility: SDRs/closers only see their own leads or unassigned leads
+    // Role-based visibility
     const role = req.user!.role;
     if (role === 'sdr' || role === 'closer') {
       filter.$or = [
@@ -81,8 +82,9 @@ router.get('/', authenticateToken, async (req: AuthRequest, res: Response) => {
         { assignedTo: { $exists: false } },
         { assignedTo: null }
       ];
-    } else if (assignedTo) {
-      filter.assignedTo = new mongoose.Types.ObjectId(assignedTo as string);
+    } else if (role === 'lead_gen') {
+      // Lead Gen only sees their own uploaded leads
+      filter.uploadedBy = new mongoose.Types.ObjectId(req.user!.id);
     }
 
     if (status) filter.status = status;
@@ -193,13 +195,17 @@ router.get('/kpis', authenticateToken, async (req: AuthRequest, res: Response) =
     // SDRs/closers only see their own leads
     if (role === 'sdr' || role === 'closer') {
       baseFilter.assignedTo = new mongoose.Types.ObjectId(req.user!.id);
+    } else if (role === 'lead_gen') {
+      baseFilter.uploadedBy = new mongoose.Types.ObjectId(req.user!.id);
     }
 
-    const [totalLeads, newLeads, closedWon, closedLost, followUpsDue] = await Promise.all([
+    const [totalLeads, newLeads, inProgress, contacted, appointmentSet, activeAccount, followUpsDue] = await Promise.all([
       Lead.countDocuments(baseFilter),
-      Lead.countDocuments({ ...baseFilter, status: 'new' }),
-      Lead.countDocuments({ ...baseFilter, status: 'won' }),
-      Lead.countDocuments({ ...baseFilter, status: 'lost' }),
+      Lead.countDocuments({ ...baseFilter, status: 'New Lead' }),
+      Lead.countDocuments({ ...baseFilter, status: 'In Progress' }),
+      Lead.countDocuments({ ...baseFilter, status: 'Contacted' }),
+      Lead.countDocuments({ ...baseFilter, status: 'Appointment Set' }),
+      Lead.countDocuments({ ...baseFilter, status: 'Active Account' }),
       Activity.countDocuments({
         ...(role === 'sdr' || role === 'closer' ? { userId: req.user!.id } : {}),
         type: 'follow_up',
@@ -208,9 +214,9 @@ router.get('/kpis', authenticateToken, async (req: AuthRequest, res: Response) =
       }),
     ]);
 
-    const activeLeads = totalLeads - closedWon - closedLost;
+    const activeLeads = totalLeads - activeAccount;
 
-    res.json({ totalLeads, newLeads, activeLeads, closedWon, closedLost, followUpsDue });
+    res.json({ totalLeads, newLeads, inProgress, contacted, appointmentSet, activeAccount, activeLeads, closedWon: activeAccount, closedLost: 0, followUpsDue });
   } catch (err) {
     console.error('GET /api/leads/kpis error:', err);
     res.status(500).json({ error: 'Server error' });
@@ -234,19 +240,19 @@ router.get('/funnel', authenticateToken, async (req: AuthRequest, res: Response)
     const stageCountMap = new Map(stageCounts.map((s: any) => [s._id?.toString(), s.count]));
 
     const totalLeads = stageCounts.reduce((acc: number, s: any) => acc + s.count, 0);
-    const closedWon = await Lead.countDocuments({ ...baseFilter, status: 'won' });
+    const closedWon = await Lead.countDocuments({ ...baseFilter, status: 'Active Account' });
     const totalRevenue = (await Lead.aggregate([
-      { $match: { ...baseFilter, status: 'won' } },
+      { $match: { ...baseFilter, status: 'Active Account' } },
       { $group: { _id: null, total: { $sum: '$dealValue' } } },
     ]))[0]?.total || 0;
 
     const conversionRate = totalLeads > 0 ? Math.round((closedWon / totalLeads) * 100) : 0;
 
-    // Average days in "new" status
-    const newLeads = await Lead.find({ ...baseFilter, status: 'new' }).select('createdAt').lean() as unknown as { createdAt: Date }[];
+    // Average days in "New Lead" status
+    const newLeadsList = await Lead.find({ ...baseFilter, status: 'New Lead' }).select('createdAt').lean() as unknown as { createdAt: Date }[];
     const now = Date.now();
-    const avgDaysNew = newLeads.length > 0
-      ? Math.round(newLeads.reduce((acc, l) => acc + (now - new Date(l.createdAt).getTime()) / (1000 * 60 * 60 * 24), 0) / newLeads.length)
+    const avgDaysNew = newLeadsList.length > 0
+      ? Math.round(newLeadsList.reduce((acc, l) => acc + (now - new Date(l.createdAt).getTime()) / (1000 * 60 * 60 * 24), 0) / newLeadsList.length)
       : 0;
 
     const stageData = stages.map((stage) => ({
@@ -263,7 +269,7 @@ router.get('/funnel', authenticateToken, async (req: AuthRequest, res: Response)
         $group: {
           _id: '$assignedTo',
           total: { $sum: 1 },
-          closedWon: { $sum: { $cond: [{ $eq: ['$status', 'won'] }, 1, 0] } },
+          closedWon: { $sum: { $cond: [{ $eq: ['$status', 'Active Account'] }, 1, 0] } },
         },
       },
       {
@@ -350,7 +356,7 @@ router.post('/', authenticateToken, validate(createLeadSchema), async (req: Auth
       ...req.body,
       uploadedBy: req.user!.id,
       pipelineStage: req.body.pipelineStage || defaultStage?._id || null,
-      status: req.body.status || 'new',
+      status: 'New Lead',
       source: req.body.source || 'manual',
     };
 
@@ -394,9 +400,47 @@ router.patch('/:id', authenticateToken, checkPermission('leads', 'edit'), valida
     const oldStatus = lead.status;
     const updates = req.body; // already sanitized and whitelisted by Zod strip()
 
-    // Apply updates
+    // Handle SDR assignment: when assignedTo or assignedAgent changes
+    if (updates.assignedTo && updates.assignedTo !== lead.assignedTo?.toString()) {
+      lead.assignedTo = new mongoose.Types.ObjectId(updates.assignedTo);
+      lead.assignedAt = new Date();
+      // Auto-advance to In Progress if currently New Lead
+      if (lead.status === 'New Lead') {
+        lead.status = 'In Progress' as any;
+      }
+      delete updates.assignedTo;
+    } else if (updates.assignedAgent !== undefined) {
+      // Legacy: assign by agent name - look up user ID
+      if (updates.assignedAgent) {
+        const sdrUser = await User.findOne({ name: updates.assignedAgent, role: 'sdr' });
+        if (sdrUser) {
+          lead.assignedTo = sdrUser._id as any;
+          lead.assignedAt = new Date();
+          if (lead.status === 'New Lead') {
+            lead.status = 'In Progress' as any;
+          }
+        }
+      } else {
+        lead.assignedTo = null;
+        lead.assignedAt = null;
+      }
+      delete updates.assignedAgent;
+    }
+
+    // Status regression prevention
+    if (updates.status && updates.status !== oldStatus) {
+      const currentOrder = STATUS_ORDER[oldStatus as LeadStatus] || 0;
+      const newOrder = STATUS_ORDER[updates.status as LeadStatus] || 0;
+      if (newOrder < currentOrder) {
+        return res.status(400).json({ error: `Cannot move status backward from "${oldStatus}" to "${updates.status}"` });
+      }
+    }
+
+    // Apply remaining updates
     Object.keys(updates).forEach((key) => {
-      (lead as any)[key] = updates[key];
+      if (key !== 'assignedTo' && key !== 'assignedAgent') {
+        (lead as any)[key] = updates[key];
+      }
     });
 
     await lead.save(); // optimistic concurrency checks __v
@@ -575,7 +619,7 @@ router.post('/bulk-upload', authenticateToken, checkPermission('leads', 'upload'
           source: 'csv_upload' as const,
           uploadedBy: new mongoose.Types.ObjectId(req.user!.id),
           pipelineStage: defaultStage?._id || null,
-          status: 'new' as const,
+          status: 'New Lead' as const,
         });
       } catch {
         errors.push({ row: i + 1, error: 'Failed to parse row' });
@@ -1039,7 +1083,7 @@ router.post('/import', authenticateToken, checkPermission('leads', 'upload'), up
           source: 'csv_upload' as const,
           uploadedBy: new mongoose.Types.ObjectId(req.user!.id),
           pipelineStage: defaultStage?._id || null,
-          status: 'new' as const,
+          status: 'New Lead' as const,
         });
       } catch {
         errors.push({ row: i + 1, error: 'Failed to parse row' });

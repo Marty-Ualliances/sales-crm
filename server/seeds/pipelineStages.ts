@@ -23,13 +23,11 @@ if (!MONGODB_URI) {
 import PipelineStage from '../models/PipelineStage.js';
 
 const DEFAULT_STAGES = [
-    { name: 'New', order: 1, color: '#6B7280', probability: 5, isDefault: true, description: 'Freshly added lead' },
-    { name: 'Contacted', order: 2, color: '#3B82F6', probability: 15, description: 'Initial contact made' },
-    { name: 'Qualified', order: 3, color: '#8B5CF6', probability: 30, description: 'Lead is qualified' },
-    { name: 'Proposal', order: 4, color: '#F59E0B', probability: 50, description: 'Proposal sent' },
-    { name: 'Negotiation', order: 5, color: '#EF4444', probability: 70, description: 'In negotiations' },
-    { name: 'Won', order: 6, color: '#10B981', probability: 100, description: 'Deal closed — won' },
-    { name: 'Lost', order: 7, color: '#DC2626', probability: 0, description: 'Deal closed — lost' },
+    { name: 'New Lead', order: 1, color: '#6B7280', probability: 5, isDefault: true, description: 'Freshly added lead' },
+    { name: 'In Progress', order: 2, color: '#3B82F6', probability: 15, description: 'SDR assigned — working the lead' },
+    { name: 'Contacted', order: 3, color: '#06B6D4', probability: 30, description: 'Initial contact made' },
+    { name: 'Appointment Set', order: 4, color: '#F59E0B', probability: 60, description: 'Meeting scheduled with prospect' },
+    { name: 'Active Account', order: 5, color: '#10B981', probability: 100, description: 'Lead converted to active account' },
 ];
 
 async function seedStages() {

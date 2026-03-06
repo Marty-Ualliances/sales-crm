@@ -3,19 +3,12 @@
  * Run: npx tsx server/seeds/defaultAdmin.ts
  */
 import mongoose from 'mongoose';
-import dotenv from 'dotenv';
+import { env } from '../config/env.js';
 
-dotenv.config({ override: false });
-
-const MONGODB_URI =
-    process.env.MONGODB_URI ||
-    process.env.MONGODB_URL ||
-    process.env.MONGO_URL ||
-    process.env.DATABASE_URL ||
-    '';
+const MONGODB_URI = env.MONGODB_URI;
 
 if (!MONGODB_URI) {
-    console.error('❌ No MongoDB URI found. Set MONGODB_URI in .env');
+    console.error('❌ No MongoDB URI found. Set MONGODB_URI in environment.');
     process.exit(1);
 }
 
@@ -30,8 +23,13 @@ async function seedAdmin() {
         if (adminExists) {
             console.log(`[SEED] Admin user already exists (${adminExists.email}) — skipping.`);
         } else {
-            const adminPassword = process.env.SEED_ADMIN_PASSWORD || 'changeme123';
-            const teamPassword = process.env.SEED_TEAM_PASSWORD || 'Team2026!';
+            const adminPassword = (env as any).SEED_ADMIN_PASSWORD;
+            const teamPassword = (env as any).SEED_TEAM_PASSWORD;
+
+            if (!adminPassword || !teamPassword) {
+                console.error('❌ SEED_ADMIN_PASSWORD and SEED_TEAM_PASSWORD must be set in environment.');
+                process.exit(1);
+            }
 
             await User.create([
                 { name: 'Admin', email: 'admin@company.com', password: adminPassword, avatar: 'AD', role: 'admin' },

@@ -1,33 +1,17 @@
-import { UserPlus, Phone, CalendarCheck, RefreshCw, FileText, Edit } from 'lucide-react';
+'use client';
+import { UserPlus, Phone, CalendarCheck, RefreshCw, FileText, Edit, Loader2 } from 'lucide-react';
+import { useActivityFeed } from '@/features/activities/hooks/useActivities';
 
-interface ActivityItem {
-  id: string;
-  user: string;
-  action: string;
-  target: string;
-  timestamp: string;
-  type: 'add' | 'call' | 'meeting' | 'status' | 'note' | 'edit';
-}
-
-const iconMap = {
-  add: UserPlus,
-  call: Phone,
-  meeting: CalendarCheck,
-  status: RefreshCw,
-  note: FileText,
-  edit: Edit,
+const typeMap: Record<string, { icon: any; style: string }> = {
+  call: { icon: Phone, style: 'bg-gradient-to-br from-success/20 to-success/5 text-success ring-success/20' },
+  meeting: { icon: CalendarCheck, style: 'bg-gradient-to-br from-warning/20 to-warning/5 text-warning ring-warning/20' },
+  'stage-change': { icon: RefreshCw, style: 'bg-gradient-to-br from-blue-500/20 to-blue-500/5 text-blue-500 ring-blue-500/20' },
+  note: { icon: FileText, style: 'bg-gradient-to-br from-muted-foreground/15 to-muted-foreground/5 text-muted-foreground ring-muted-foreground/15' },
+  edit: { icon: Edit, style: 'bg-gradient-to-br from-violet-500/20 to-violet-500/5 text-violet-500 ring-violet-500/20' },
+  default: { icon: UserPlus, style: 'bg-gradient-to-br from-primary/20 to-primary/5 text-primary ring-primary/20' },
 };
 
-const iconStyles = {
-  add: 'bg-gradient-to-br from-primary/20 to-primary/5 text-primary ring-primary/20',
-  call: 'bg-gradient-to-br from-success/20 to-success/5 text-success ring-success/20',
-  meeting: 'bg-gradient-to-br from-warning/20 to-warning/5 text-warning ring-warning/20',
-  status: 'bg-gradient-to-br from-blue-500/20 to-blue-500/5 text-blue-500 ring-blue-500/20',
-  note: 'bg-gradient-to-br from-muted-foreground/15 to-muted-foreground/5 text-muted-foreground ring-muted-foreground/15',
-  edit: 'bg-gradient-to-br from-violet-500/20 to-violet-500/5 text-violet-500 ring-violet-500/20',
-};
-
-function timeAgo(dateStr: string): string {
+function timeAgo(dateStr: string | Date): string {
   const now = new Date();
   const date = new Date(dateStr);
   const diffMs = now.getTime() - date.getTime();
@@ -40,21 +24,27 @@ function timeAgo(dateStr: string): string {
   return `${diffDays}d ago`;
 }
 
-const now = new Date();
-const h = (hours: number) => new Date(now.getTime() - hours * 3600000).toISOString();
+function describeActivity(a: any): { user: string; action: string; target: string } {
+  const user = a.userId?.name || 'Someone';
+  const lead = a.leadId ? `${a.leadId.firstName || ''} ${a.leadId.lastName || ''}`.trim() : '';
 
-const recentActivities: ActivityItem[] = [
-  { id: '1', user: 'David Martinez', action: 'added a new lead', target: 'Thomas Anderson', timestamp: h(0.5), type: 'add' },
-  { id: '2', user: 'Sarah Johnson', action: 'set up a meeting with', target: 'Robert Smith', timestamp: h(1), type: 'meeting' },
-  { id: '3', user: 'Emily Davis', action: 'updated lead status for', target: 'Sarah Kim', timestamp: h(2), type: 'status' },
-  { id: '4', user: 'Mike Chen', action: 'completed a follow-up call with', target: 'Jennifer Brown', timestamp: h(4), type: 'call' },
-  { id: '5', user: 'James Wilson', action: 'added a note to', target: 'William Garcia', timestamp: h(6), type: 'note' },
-  { id: '6', user: 'Sarah Johnson', action: 'closed the deal with', target: 'Lisa Thompson', timestamp: h(12), type: 'status' },
-  { id: '7', user: 'Emily Davis', action: 'logged a call with', target: 'David Martinez', timestamp: h(18), type: 'call' },
-  { id: '8', user: 'Mike Chen', action: 'edited lead details for', target: 'Amanda White', timestamp: h(24), type: 'edit' },
-];
+  switch (a.type) {
+    case 'call':
+      return { user, action: `logged a ${a.callOutcome || 'call'} call with`, target: lead || 'a lead' };
+    case 'meeting':
+      return { user, action: 'scheduled a meeting with', target: lead || 'a lead' };
+    case 'stage-change':
+      return { user, action: `moved`, target: `${lead || 'a lead'} to ${a.toStage?.name || 'new stage'}` };
+    case 'note':
+      return { user, action: 'added a note to', target: lead || 'a lead' };
+    default:
+      return { user, action: a.description || 'performed an action on', target: lead || '' };
+  }
+}
 
 export default function RecentActivityFeed() {
+  const { data: activities = [], isLoading } = useActivityFeed();
+
   return (
     <div className="rounded-xl border border-border bg-card shadow-card overflow-hidden">
       <div className="flex items-center justify-between px-6 py-4 border-b border-border/50 bg-gradient-to-r from-card to-secondary/20">
@@ -67,35 +57,46 @@ export default function RecentActivityFeed() {
         </div>
       </div>
       <div className="max-h-[360px] overflow-y-auto">
-        <div className="px-6 py-4">
-          {recentActivities.map((activity, i) => {
-            const Icon = iconMap[activity.type];
-            const isLast = i === recentActivities.length - 1;
-            return (
-              <div key={activity.id} className="relative flex gap-4 group">
-                {/* Timeline connector */}
-                <div className="flex flex-col items-center">
-                  <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-2 ${iconStyles[activity.type]} transition-all duration-200 group-hover:scale-110 group-hover:ring-3`}>
-                    <Icon className="h-4 w-4" />
+        {isLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-5 w-5 animate-spin text-primary" />
+          </div>
+        ) : activities.length === 0 ? (
+          <div className="px-6 py-12 text-center text-sm text-muted-foreground">
+            No recent activity yet
+          </div>
+        ) : (
+          <div className="px-6 py-4">
+            {activities.slice(0, 10).map((activity: any, i: number) => {
+              const { icon: Icon, style } = typeMap[activity.type] || typeMap.default;
+              const { user, action, target } = describeActivity(activity);
+              const isLast = i === Math.min(activities.length, 10) - 1;
+              return (
+                <div key={activity._id} className="relative flex gap-4 group">
+                  {/* Timeline connector */}
+                  <div className="flex flex-col items-center">
+                    <div className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ring-2 ${style} transition-all duration-200 group-hover:scale-110 group-hover:ring-3`}>
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    {!isLast && (
+                      <div className="w-px flex-1 bg-gradient-to-b from-border to-transparent min-h-[20px]" />
+                    )}
                   </div>
-                  {!isLast && (
-                    <div className="w-px flex-1 bg-gradient-to-b from-border to-transparent min-h-[20px]" />
-                  )}
-                </div>
 
-                {/* Content */}
-                <div className={`flex-1 min-w-0 ${isLast ? 'pb-0' : 'pb-5'}`}>
-                  <p className="text-sm text-foreground leading-relaxed">
-                    <span className="font-semibold">{activity.user}</span>{' '}
-                    <span className="text-muted-foreground">{activity.action}</span>{' '}
-                    <span className="font-semibold">{activity.target}</span>
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">{timeAgo(activity.timestamp)}</p>
+                  {/* Content */}
+                  <div className={`flex-1 min-w-0 ${isLast ? 'pb-0' : 'pb-5'}`}>
+                    <p className="text-sm text-foreground leading-relaxed">
+                      <span className="font-semibold">{user}</span>{' '}
+                      <span className="text-muted-foreground">{action}</span>{' '}
+                      {target && <span className="font-semibold">{target}</span>}
+                    </p>
+                    <p className="text-xs text-muted-foreground mt-1">{timeAgo(activity.createdAt)}</p>
+                  </div>
                 </div>
-              </div>
-            );
-          })}
-        </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

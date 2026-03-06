@@ -80,5 +80,8 @@ export const leadsApi = {
         request<{ updated: number }>('/leads/bulk-assign', { method: 'POST', body: JSON.stringify({ leadIds, agentName }) }),
     bulkDelete: (leadIds: string[]) =>
         request<{ deleted: number }>('/leads/bulk-delete', { method: 'POST', body: JSON.stringify({ leadIds }) }),
-    funnel: () => request<any>('/leads/funnel'),
+    funnel: (params?: { dateRange?: string }) => {
+        const qs = params?.dateRange ? `?dateRange=${params.dateRange}` : '';
+        return request<any>(`/leads/funnel${qs}`);
+    },
 };

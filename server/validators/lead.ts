@@ -7,7 +7,7 @@ export const leadBodySchema = z.object({
     phone: z.string().max(100).optional().or(z.literal('')),
     company: z.string().max(100).optional().or(z.literal('')),
     jobTitle: z.string().max(100).optional().or(z.literal('')),
-    status: z.enum(['new', 'contacted', 'qualified', 'proposal', 'negotiation', 'won', 'lost']).optional(),
+    status: z.enum(['New Lead', 'In Progress', 'Contacted', 'Appointment Set', 'Active Account']).optional(),
     source: z.string().max(100).optional(),
     pipelineStage: z.string().length(24, 'Invalid ObjectId').optional().or(z.literal('').transform(() => undefined)).or(z.null()),
     dealValue: z.number().min(0).max(999999999).optional().or(z.string().regex(/^\d+$/).transform(Number)),
@@ -17,6 +17,8 @@ export const leadBodySchema = z.object({
     city: z.string().max(100).optional(),
     state: z.string().max(100).optional(),
     notes: z.string().max(10000).optional(),
+    assignedTo: z.string().length(24, 'Invalid ObjectId').optional().or(z.literal('').transform(() => undefined)).or(z.null()),
+    assignedAgent: z.string().max(100).optional(),
 }); // Zod's default is .strip() so extraneous fields will be removed
 
 export const createLeadSchema = z.object({

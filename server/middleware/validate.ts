@@ -10,7 +10,12 @@ export const validate = (schema: AnyZodObject) => {
                 params: req.params,
             });
             req.body = parsed.body;
-            req.query = parsed.query;
+            // Express 5: req.query is a getter — shadow it with a data property
+            Object.defineProperty(req, 'query', {
+              value: parsed.query,
+              writable: true,
+              configurable: true,
+            });
             req.params = parsed.params as any;
             next();
         } catch (error) {

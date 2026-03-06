@@ -47,7 +47,7 @@ export default function HRDashboard() {
           <KPICard title="Contacted" value={data?.totalCalls ?? 0} icon={PhoneCall} link="/hr/leads" />
         </div>
         <div className="animate-slide-up stagger-4">
-          <KPICard title="Appointment Setter" value={0} icon={CheckCircle2} link="/hr/leads" />
+          <KPICard title="Appointment Set" value={data?.appointmentSetLeads ?? 0} icon={CheckCircle2} link="/hr/leads" />
         </div>
         <div className="animate-slide-up stagger-5">
           <KPICard title="Active Accounts" value={data?.closedLeads ?? 0} icon={BarChart3} link="/hr/closed-leads" />
